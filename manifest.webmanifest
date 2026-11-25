@@ -1,0 +1,19 @@
+{
+  "name": "SNOW·PROFE — Aprende snowboard",
+  "short_name": "SNOW·PROFE",
+  "description": "Aprende snowboard paso a paso con una tabla 3D interactiva.",
+  "lang": "es",
+  "start_url": "./?app=1",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#070b1c",
+  "theme_color": "#070b1c",
+  "categories": ["education", "sports"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

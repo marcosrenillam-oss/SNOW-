@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>SNOW·PROFE — Aprende snowboard</title>
+  <meta name="description" content="Aprende snowboard paso a paso con una tabla 3D interactiva: tu tabla, las fijaciones, regular o goofy, el método de los pedales, cantos, giros y trucos.">
+
+  <!-- App / pantalla de inicio -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#070b1c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SNOW·PROFE">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Unbounded:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <!-- Cargando -->
+  <div id="loader" aria-hidden="true">
+    <div class="loader-board"></div>
+    <p>Encerando la tabla…</p>
+  </div>
+
+  <!-- Escena 3D (fija detrás de todo) -->
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div id="labels" aria-hidden="true"></div>
+  <div id="flash" aria-hidden="true"></div>
+
+  <!-- Barra superior -->
+  <header class="topbar">
+    <a href="#inicio" class="brand" data-goto="inicio">SNOW<span>·</span>PROFE</a>
+    <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+    <button id="menu-btn" class="menu-btn" aria-expanded="false" aria-controls="drawer">
+      <span id="menu-count">01/13</span>
+      <span class="burger"><i></i><i></i></span>
+    </button>
+  </header>
+
+  <!-- Puntos laterales (ordenador) -->
+  <nav id="dots" class="dots" aria-label="Pasos"></nav>
+
+  <!-- Menú de pasos -->
+  <div id="drawer-backdrop"></div>
+  <aside id="drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <p class="kicker">Tu clase</p>
+      <h3>Pasos</h3>
+      <button class="drawer-close" aria-label="Cerrar">✕</button>
+    </div>
+    <ol id="drawer-list"></ol>
+  </aside>
+
+  <main id="content">
+
+    <!-- 00 INICIO -->
+    <section class="step hero" id="inicio" data-title="Inicio" data-desc="Bienvenido a la clase">
+      <div class="card hero-card">
+        <p class="kicker">Clase de snowboard · desde cero</p>
+        <h1>Aprende snow<br>como si estuviera<br><em>a tu lado.</em></h1>
+        <p class="lead">Baja haciendo scroll. Esta tabla te va a enseñar todo: cómo es, cómo te pones, cómo frenas, cómo giras… y mi truco favorito: <strong>los pedales</strong>.</p>
+        <div class="row">
+          <button class="btn primary" data-goto="tabla">Empezar la clase</button>
+          <button class="btn ghost" data-open-menu>Ver los pasos</button>
+        </div>
+      </div>
+      <div class="scroll-hint"><span></span>Desliza</div>
+    </section>
+
+    <!-- 01 LA TABLA -->
+    <section class="step long" id="tabla" data-title="Tu tabla" data-desc="Nose, tail, cantos y base">
+      <div class="card">
+        <p class="kicker">Paso 01</p>
+        <h2>Conoce tu tabla</h2>
+        <p>Antes de subirte, mírala bien. Tiene dos puntas casi iguales: el <b>nose</b> (delante) y el <b>tail</b> (detrás). Los bordes son <b>cantos de acero</b>: con ellos agarras la nieve, frenas y giras.</p>
+        <p class="hint">Sigue bajando y la tabla se dará la vuelta para que veas la <b>base</b>: la parte que desliza.</p>
+        <ul class="chips">
+          <li><b>Nose</b> punta delantera</li>
+          <li><b>Tail</b> cola</li>
+          <li><b>Cantos</b> el metal que agarra</li>
+          <li><b>Base</b> lo que desliza</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 02 FIJACIONES -->
+    <section class="step long" id="fijaciones" data-title="Fijaciones" data-desc="Highback, straps y ángulos">
+      <div class="card">
+        <p class="kicker">Paso 02</p>
+        <h2>Las fijaciones</h2>
+        <p>Es lo que te une a la tabla. El <b>highback</b> es el respaldo de detrás del gemelo, el <b>strap de tobillo</b> sujeta el talón y el <b>strap de puntera</b> la parte delantera de la bota. Van atornilladas a un <b>disco</b> que se gira para cambiar el ángulo.</p>
+        <div class="angles">
+          <div class="angle-row">
+            <label for="ang-front">Pie delantero <output id="out-front">+15°</output></label>
+            <input type="range" id="ang-front" min="-30" max="30" step="1" value="15">
+          </div>
+          <div class="angle-row">
+            <label for="ang-back">Pie trasero <output id="out-back">−6°</output></label>
+            <input type="range" id="ang-back" min="-30" max="30" step="1" value="-6">
+          </div>
+          <div class="seg" role="group" aria-label="Ángulos predefinidos">
+            <button class="on" data-preset="15,-6">Duck +15/−6</button>
+            <button data-preset="18,6">Adelante +18/+6</button>
+            <button data-preset="0,0">Plano 0/0</button>
+          </div>
+          <p class="hint" id="angle-tip">Duck (pato): las dos puntas hacia fuera. Es la más cómoda para empezar y para ir en los dos sentidos.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 REGULAR O GOOFY -->
+    <section class="step long" id="stance" data-title="¿Regular o goofy?" data-desc="Qué pie va delante">
+      <div class="card">
+        <p class="kicker">Paso 03</p>
+        <h2>¿Regular o goofy?</h2>
+        <p><b>Regular</b>: pie <b>izquierdo</b> delante. <b>Goofy</b>: pie <b>derecho</b> delante. Ninguno es mejor, es lo natural para ti. Haz el test rápido:</p>
+        <div id="quiz" class="quiz">
+          <div class="q" data-q="0">
+            <p>1 · Si alguien te empuja suave por la espalda, ¿qué pie adelantas para no caerte?</p>
+            <div class="seg"><button data-a="L">Izquierdo</button><button data-a="R">Derecho</button></div>
+          </div>
+          <div class="q" data-q="1">
+            <p>2 · Te tiras deslizando en calcetines por el pasillo: ¿qué pie va delante?</p>
+            <div class="seg"><button data-a="L">Izquierdo</button><button data-a="R">Derecho</button></div>
+          </div>
+          <div class="q" data-q="2">
+            <p>3 · ¿Con qué pie chutas un balón?</p>
+            <div class="seg"><button data-a="R">Derecho</button><button data-a="L">Izquierdo</button></div>
+          </div>
+          <p class="hint quiz-note">Ojo: el pie con el que chutas suele ir <b>detrás</b>.</p>
+        </div>
+        <div class="result" id="quiz-result" hidden></div>
+        <div class="seg big" role="group" aria-label="Elegir postura">
+          <button data-stance="regular" class="on">Regular · izq. delante</button>
+          <button data-stance="goofy">Goofy · der. delante</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 POSTURA -->
+    <section class="step long" id="postura" data-title="Postura base" data-desc="Rodillas, peso y mirada">
+      <div class="card">
+        <p class="kicker">Paso 04 · Salimos a la pista</p>
+        <h2>La postura base</h2>
+        <ol class="steps-list">
+          <li><b>Rodillas flexionadas</b>, como si te fueras a sentar en un taburete alto.</li>
+          <li><b>Peso 50/50</b> entre los dos pies. Nada forzado.</li>
+          <li><b>Espalda recta</b> y hombros paralelos a la tabla.</li>
+          <li><b>Mirada</b> hacia donde quieres ir, nunca a tus pies.</li>
+        </ol>
+        <div class="seg" role="group" aria-label="Flexión">
+          <button data-crouch="0.1">Rígido ✗</button>
+          <button data-crouch="0.55" class="on">Flexionado ✓</button>
+          <button data-crouch="1">Demasiado ✗</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 PEDALES -->
+    <section class="step long" id="pedales" data-title="Los pedales" data-desc="El truco para ir de lado a lado">
+      <div class="card accent">
+        <p class="kicker">Paso 05 · El truco del profe ⭐</p>
+        <h2>El método de los pedales</h2>
+        <p>Así me lo enseñaron a mí y es lo que más rápido funciona. Imagina que tus pies están encima de <b>dos pedales</b>. Estás en la tabla, relajado, sin forzar nada:</p>
+        <ul class="pedal-rules">
+          <li><i class="k">IZQ</i><span>Aprietas un poco el <b>pie izquierdo</b> → vas hacia la <b>izquierda</b>.</span></li>
+          <li><i class="k">DER</i><span>Sueltas y aprietas el <b>pie derecho</b> → vas hacia la <b>derecha</b>.</span></li>
+          <li><i class="k">=</i><span>Los dos iguales → la tabla <b>recta</b>, bajando despacio.</span></li>
+        </ul>
+        <p class="hint">Pruébalo: mantén pulsado un pedal (o usa ← → / A D en el teclado).</p>
+        <div class="pedals" data-pedals>
+          <button class="pedal" data-pedal="L"><span>Pie izq.</span><i class="meter"><b></b></i></button>
+          <button class="pedal" data-pedal="R"><span>Pie der.</span><i class="meter"><b></b></i></button>
+        </div>
+        <p class="pedal-status" id="pedal-status">Peso repartido · tabla recta</p>
+      </div>
+    </section>
+
+    <!-- 06 FRONT Y BACK -->
+    <section class="step long" id="cantos" data-title="Front y back" data-desc="Canto de puntas y de talones">
+      <div class="card">
+        <p class="kicker">Paso 06</p>
+        <h2>Ir de back y de front</h2>
+        <p><b>Back (backside)</b>: vas sobre el <b>canto de los talones</b>, mirando hacia abajo de la pista, de espaldas a la montaña. Levantas un poco las puntas.</p>
+        <p><b>Front (frontside)</b>: vas sobre el <b>canto de las puntas</b>, mirando a la montaña. Levantas un poco los talones.</p>
+        <div class="seg big" role="group" aria-label="Canto">
+          <button data-edge="back" class="on">Back · talones</button>
+          <button data-edge="front">Front · puntas</button>
+        </div>
+        <p class="hint">Truco: los pedales funcionan igual en los dos. Si vas de front, mirando a la montaña, tu izquierda queda a la derecha de la pantalla… pero la regla no cambia: <b>aprieta el pie del lado al que quieres ir.</b></p>
+      </div>
+    </section>
+
+    <!-- 07 HOJA MUERTA -->
+    <section class="step long" id="hoja" data-title="Hoja muerta" data-desc="Derrapar de lado a lado">
+      <div class="card">
+        <p class="kicker">Paso 07</p>
+        <h2>La hoja muerta</h2>
+        <p>Es el primer ejercicio de verdad. Te quedas en un canto (primero de back) y vas bajando de un lado a otro como una hoja que cae de un árbol, <b>sin girar la tabla</b>. Solo con los pedales:</p>
+        <ol class="steps-list">
+          <li>Aprieta el pie izquierdo: te deslizas a la izquierda.</li>
+          <li>Iguala el peso: frenas.</li>
+          <li>Aprieta el derecho: te deslizas a la derecha.</li>
+        </ol>
+        <div class="seg" role="group" aria-label="Canto">
+          <button data-edge="back" class="on">De back</button>
+          <button data-edge="front">De front</button>
+        </div>
+        <p class="hint">Mira la huella que deja en la nieve: zig-zag, sin cruzar nunca la línea de caída.</p>
+      </div>
+    </section>
+
+    <!-- 08 GIRAR -->
+    <section class="step long" id="giro" data-title="Tu primer giro" data-desc="Enlazar back y front">
+      <div class="card">
+        <p class="kicker">Paso 08</p>
+        <h2>Tu primer giro</h2>
+        <p>Girar es pasar de un canto al otro. Con los pedales: aprietas el <b>pie delantero</b> hasta que la punta mira hacia abajo, pasas por la <b>base plana</b> un instante y cambias de canto.</p>
+        <ol class="steps-list">
+          <li><b>Mira</b> hacia donde quieres girar. El cuerpo sigue a la cabeza.</li>
+          <li><b>Pedal delantero</b>: carga el pie de delante.</li>
+          <li><b>Plana</b>: la tabla pasa un momento sin canto.</li>
+          <li><b>Cambia de canto</b>: de talones a puntas (o al revés) y flexiona.</li>
+        </ol>
+        <div class="turn-phase" id="turn-phase"><span>●</span> <b id="turn-label">Back · talones</b></div>
+      </div>
+    </section>
+
+    <!-- 09 TRUCOS -->
+    <section class="step long" id="trucos" data-title="Trucos" data-desc="Ollie, nollie, press y más">
+      <div class="card">
+        <p class="kicker">Paso 09</p>
+        <h2>Trucos para empezar</h2>
+        <div class="seg wrap" role="group" aria-label="Trucos">
+          <button data-trick="ollie" class="on">Ollie</button>
+          <button data-trick="nollie">Nollie</button>
+          <button data-trick="press">Nose press</button>
+          <button data-trick="shifty">Shifty</button>
+          <button data-trick="spin">180</button>
+        </div>
+        <div class="trick-info" id="trick-info"></div>
+      </div>
+    </section>
+
+    <!-- 10 JUEGO -->
+    <section class="step" id="juego" data-title="Reto: slalom" data-desc="Juega con los pedales">
+      <div class="card accent">
+        <p class="kicker">Paso 10 · Reto</p>
+        <h2>Slalom de pedales</h2>
+        <p>Baja haciendo la hoja muerta y pasa por dentro de las <b>banderas</b>. Solo puedes usar los pedales: cada vez irás más rápido. Tienes 3 vidas.</p>
+        <p class="best">Tu récord: <b id="best-score">0</b> puertas</p>
+        <button class="btn primary big" id="play-btn">▶ Jugar</button>
+      </div>
+    </section>
+
+    <!-- 11 CONSEJOS -->
+    <section class="step long" id="consejos" data-title="Consejos del profe" data-desc="Lo que me enseñaron a mí">
+      <div class="card wide">
+        <p class="kicker">Paso 11</p>
+        <h2>Consejos del profe</h2>
+        <div class="tips" id="tips"></div>
+      </div>
+    </section>
+
+    <!-- 12 FINAL -->
+    <section class="step" id="final" data-title="¡A la pista!" data-desc="Instálala en tu móvil">
+      <div class="card">
+        <p class="kicker">Fin de la clase</p>
+        <h2>¿Listo para la pista?</h2>
+        <p>Guárdala en tu móvil para tenerla siempre a mano, incluso sin cobertura en la estación.</p>
+        <div class="install" id="install">
+          <div class="ios-only"><b>iPhone:</b> toca <span class="ico">⬆︎</span> Compartir → <b>Añadir a pantalla de inicio</b>.</div>
+          <div class="android-only"><b>Android:</b> menú <span class="ico">⋮</span> → <b>Instalar aplicación</b>.</div>
+          <button class="btn primary" id="install-btn" hidden>Instalar la app</button>
+        </div>
+        <div class="row">
+          <button class="btn ghost" data-goto="inicio">Volver a empezar</button>
+          <button class="btn ghost" data-goto="juego">Jugar otra vez</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- HUD del juego -->
+  <div id="game" hidden>
+    <div class="game-top">
+      <div class="lives" id="lives">❤❤❤</div>
+      <div class="score"><b id="score">0</b><span>puertas</span></div>
+      <button class="game-exit" id="game-exit" aria-label="Salir">✕</button>
+    </div>
+    <div class="game-msg" id="game-msg"></div>
+    <div class="pedals game-pedals" data-pedals>
+      <button class="pedal" data-pedal="L"><span>Pie izq.</span><i class="meter"><b></b></i></button>
+      <button class="pedal" data-pedal="R"><span>Pie der.</span><i class="meter"><b></b></i></button>
+    </div>
+    <div class="game-over" id="game-over" hidden>
+      <h3>¡Fin de la bajada!</h3>
+      <p><b id="final-score">0</b> puertas · récord <b id="final-best">0</b></p>
+      <div class="row">
+        <button class="btn primary" id="again-btn">Otra vez</button>
+        <button class="btn ghost" id="quit-btn">Salir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Solo vertical en la app -->
+  <div id="rotate-lock"><div class="phone"></div><p>Gira el móvil en vertical</p></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
