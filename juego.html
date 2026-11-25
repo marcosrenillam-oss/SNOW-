@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>La bajada — SNOW·PROFE</title>
+  <meta name="description" content="Baja una pista roja de 900 m con snowpark usando solo los pedales: saltos, giros, grabs y cajones.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0a0a0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body class="game-page">
+  <div id="loader" aria-hidden="true">
+    <div class="ld-top"><span>Snow·Profe</span><span>La bajada</span></div>
+    <div class="ld-mid"><span class="ld-word">Subiendo<em> en telesilla</em></span></div>
+    <div class="ld-bot"><span class="ld-count" id="ld-count">000</span><i class="ld-bar"><b id="ld-bar"></b></i></div>
+  </div>
+  <canvas id="scene" aria-hidden="true"></canvas>
+  <div id="flash" aria-hidden="true"></div>
+  <div id="grain" aria-hidden="true"></div>
+
+  <!-- Menú de salida -->
+  <div id="start" class="start">
+    <a class="link-btn back" href="./">← Volver a la clase</a>
+    <div class="start-card">
+      <p class="kicker">El reto <span>—</span> pista roja · 900 m</p>
+      <h1>La bajada</h1>
+      <p class="lead">Una pista estilo Formigal con snowpark. Bajas con tu tabla solo con los pedales.</p>
+      <ul class="pedal-rules">
+        <li><i class="k l">IZQ</i><span>Pie izquierdo → giras a la izquierda.</span></li>
+        <li><i class="k r">DER</i><span>Pie derecho → giras a la derecha.</span></li>
+        <li><i class="k">⤒</i><span>Mantén <b>SALTAR</b> y suelta: ollie. En el aire, pedales = giros; SALTAR = grab.</span></li>
+        <li><i class="k">▭</i><span>Cae sobre un <b>cajón</b> y deslizas. Aterriza recto o… al suelo.</span></li>
+      </ul>
+      <div class="seg" role="group" aria-label="Modo">
+        <button data-mode="libre" class="on">Bajada libre</button>
+        <button data-mode="slalom">Slalom</button>
+      </div>
+      <div class="seg board-pick" role="group" aria-label="Tabla">
+        <button data-skin="drake"><i class="sw drake"></i>La blanca · Oso</button>
+        <button data-skin="snake"><i class="sw snake"></i>La negra · Serpiente</button>
+      </div>
+      <button class="btn primary big" id="play-btn">▶ Bajar la montaña</button>
+      <p class="best">Mejor tiempo: <b id="best-score">—</b> · Récord de puntos: <b id="best-points">0</b></p>
+      <p class="hint">En el ordenador: ← → y la barra espaciadora.</p>
+    </div>
+  </div>
+
+  <div id="game" hidden>
+    <div class="game-top">
+      <div class="g-box"><b id="g-speed">0</b><span>km/h</span></div>
+      <div class="g-box g-score"><b id="g-score">0</b><span>puntos</span></div>
+      <div class="g-mid">
+        <div class="g-track"><i id="g-prog"></i><span class="g-flag">🏁</span></div>
+        <div class="g-sub"><span id="g-time">0:00.0</span><span id="g-gates"></span></div>
+      </div>
+      <button class="icon-btn" id="game-exit" aria-label="Salir">✕</button>
+    </div>
+    <div class="game-msg" id="game-msg"></div>
+    <div class="game-trick" id="g-trick"><b></b><span></span></div>
+    <div class="game-controls">
+      <button class="pedal" data-pedal="L"><span>◀ Pie izq.</span><i class="meter"><b></b></i></button>
+      <button class="jump" id="jump-btn"><i class="charge"></i><span>⤒</span><small>Saltar</small></button>
+      <button class="pedal" data-pedal="R"><span>Pie der. ▶</span><i class="meter"><b></b></i></button>
+    </div>
+    <div class="game-over" id="game-over" hidden>
+      <p class="kicker">Meta</p>
+      <h3 id="go-title">¡Bajada completada!</h3>
+      <div class="stats">
+        <div><b id="go-time">0:00</b><span>tiempo</span></div>
+        <div><b id="go-top">0</b><span>km/h máx.</span></div>
+        <div id="go-gates-box"><b id="go-gates">0</b><span>puertas</span></div>
+        <div><b id="go-score">0</b><span>puntos</span></div>
+      </div>
+      <p class="hint" id="go-best"></p>
+      <div class="row">
+        <button class="btn primary" id="again-btn">Otra vez</button>
+        <button class="btn ghost" id="quit-btn">Menú</button>
+      </div>
+    </div>
+  </div>
+  <div id="rotate-lock"><div class="phone"></div><p>Gira el móvil en vertical</p></div>
+  <script type="module" src="js/play.js"></script>
+</body>
+</html>

@@ -553,6 +553,35 @@ function makeRider() {
   return g;
 }
 
+
+// Avatar estilo animación: sustituye casco y braga por la cabeza modelada en Blender
+export function applyAvatar(rider, gltf) {
+  const P = rider.userData.P, RM = rider.userData.M;
+  const skin = new THREE.MeshPhysicalMaterial({ color: 0xf0b896, roughness: 0.55, sheen: 0.5, sheenColor: new THREE.Color(0xffc9b0), sheenRoughness: 0.6, clearcoat: 0.08 });
+  RM.beanie = fabricMat(0xc81d33, 10, { roughness: 0.95 });
+  const pom = fabricMat(0xf2f2f2, 14, { roughness: 1 });
+  const MAP = {
+    Skin: skin,
+    EyeWhite: new THREE.MeshPhysicalMaterial({ color: 0xf6f6f8, roughness: 0.08, clearcoat: 1 }),
+    Iris: new THREE.MeshPhysicalMaterial({ color: 0x3b6fb0, roughness: 0.1, clearcoat: 1 }),
+    Pupil: new THREE.MeshPhysicalMaterial({ color: 0x050505, roughness: 0.05, clearcoat: 1 }),
+    Glint: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    Hair: new THREE.MeshPhysicalMaterial({ color: 0x3a2214, roughness: 0.55, sheen: 0.8, sheenColor: new THREE.Color(0x8a5a3a) }),
+    Mouth: new THREE.MeshStandardMaterial({ color: 0x8a2a2c, roughness: 0.5 }),
+    Blush: new THREE.MeshStandardMaterial({ color: 0xf08a80, roughness: 0.7, transparent: true, opacity: 0.55 }),
+    Beanie: RM.beanie, Pompom: pom, GoggleFrame: RM.black, Lens: RM.lens,
+  };
+  for (const ch of [...P.head.children]) if (ch.isMesh) P.head.remove(ch);
+  const head = gltf.scene.clone(true);
+  head.traverse((o) => { if (o.isMesh) { o.material = MAP[o.material.name] || skin; o.castShadow = true; } });
+  head.scale.setScalar(1.32);
+  P.head.add(head);
+  // cuello
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 20), skin);
+  neck.position.y = -0.04; P.head.add(neck);
+  rider.userData.avatar = true;
+}
+
 const _v = {};
 for (const k of ['hip', 'hipL', 'hipR', 'kL', 'kR', 'chest', 'shL', 'shR', 'eL', 'eR', 'hL', 'hR', 'side', 't', 'g', 'w']) _v[k] = new THREE.Vector3();
 const hintL = new THREE.Vector3(0.25, 0, 1).normalize(), hintR = new THREE.Vector3(-0.25, 0, 1).normalize();
@@ -584,7 +613,8 @@ export function poseRider(rider, footL, footR, o) {
   P.torso.quaternion.setFromUnitVectors(UP, tdir.normalize());
   P.torso.rotateY(tw);
   P.torso.scale.set(1, tlen / 0.46, 1);
-  P.head.position.copy(V.chest).add(V.t.set(0, 0.21, 0.015));
+  if (rider.userData.avatar) P.head.position.copy(V.chest).add(V.t.set(0, 0.115, 0.03));
+  else P.head.position.copy(V.chest).add(V.t.set(0, 0.21, 0.015));
   P.head.rotation.set(0.05 + (o.grab || 0) * 0.3, o.lookYaw || 0, 0);
 
   V.shL.copy(V.chest).addScaledVector(V.side, 0.2).add(V.t.set(0, -0.05, 0));
@@ -679,13 +709,15 @@ export async function buildWorld(renderer) {
   scene.add(hemi, key, rim, warm, fill);
 
   // Carga mínima para arrancar rápido: tablas + fondo de estudio. Lo de exterior se carga después.
-  const [dTop, dBase, sTop, sBase, studioBg, bindGltf] = await Promise.all([
+  const gl = new GLTFLoader();
+  const [dTop, dBase, sTop, sBase, studioBg, bindGltf, avatarGltf] = await Promise.all([
     ...['drake-top', 'drake-base', 'snake-top', 'snake-base'].map((n) => loadTex(`assets/${n}.jpg`, renderer)),
-    loadTex('assets/env/studio-bg.jpg', renderer),
-    new GLTFLoader().loadAsync('assets/models/binding.glb').catch(() => null),
+    loadTex('assets/env/alps-2k.jpg', renderer),
+    gl.loadAsync('assets/models/binding.glb').catch(() => null),
+    gl.loadAsync('assets/models/avatar.glb').catch(() => null),
   ]);
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envStudio = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const envStudio = pmrem.fromEquirectangular(studioBg).texture;   // luz y reflejos del panorama real
   const sphere = (tex, order, rot) => {
     tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = -1;
     const m = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, fog: false, toneMapped: false }));
@@ -693,7 +725,7 @@ export async function buildWorld(renderer) {
   };
   // Fondo realista de estudio: campo nevado a la hora azul, desenfocado
   const studioSphere = sphere(studioBg, -10, 2.2);
-  studioSphere.rotation.order = 'YXZ'; studioSphere.rotation.x = -0.32; studioSphere.material.color.setRGB(0.82, 0.84, 0.9);
+  studioSphere.material.color.setRGB(1, 1, 1);
   // Fondo real de pista (se carga después)
   const bgSphere = sphere(new THREE.Texture(), -9, 0.6);
   const pbr = (t, rep) => { const c = t.clone(); c.needsUpdate = true; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(rep[0], rep[1]); return c; };
@@ -753,6 +785,7 @@ export async function buildWorld(renderer) {
   addA('baseSpot', 0.12, 0.02, -0.06);
 
   const rider = makeRider();
+  if (avatarGltf) applyAvatar(rider, avatarGltf);
   rig.add(rider);
 
   const arrowShape = new THREE.Shape();
@@ -824,6 +857,7 @@ export async function buildWorld(renderer) {
     const r = th.rider;
     RM.jacket.color.setHex(r.jacket); RM.jacketDark.color.setHex(r.jacketDark); RM.pants.color.setHex(r.pants);
     RM.stripe.color.setHex(r.stripe); RM.lens.color.setHex(r.lens); RM.helmet.color.setHex(r.helmet);
+    if (RM.beanie) RM.beanie.color.setHex(name === 'snake' ? 0xff6a1a : 0xc81d33);
     rider.userData.strap.material = name === 'snake' ? RM.stripe : RM.jacket;
     toeEdge.material.color.setHex(th.accent); glowR.material.color.setHex(th.accent); arrow.material.color.setHex(th.accent);
     warm.color.setHex(th.accent);
@@ -836,13 +870,14 @@ export async function buildWorld(renderer) {
   function loadOutdoor() {
     if (outdoorP) return outdoorP;
     outdoorP = Promise.all([
-      loadTex('assets/env/mountain-bg.jpg', renderer),
+      loadTex('assets/env/alps-4k.jpg', renderer),
       loadTex('assets/snow/snow_diff.jpg', renderer), loadTex('assets/snow/snow_nor_gl.jpg', renderer), loadTex('assets/snow/snow_rough.jpg', renderer),
       loadTex('assets/fabric/fabric_nor.jpg', renderer), loadTex('assets/fabric/fabric_rough.jpg', renderer),
     ]).then(([bg, snowD, snowNm, snowR, fN, fR]) => {
       for (const t of [snowNm, snowR, fN, fR]) t.colorSpace = THREE.NoColorSpace;
       bg.wrapS = THREE.RepeatWrapping; bg.repeat.x = -1;
       bgSphere.material.map = bg; bgSphere.material.needsUpdate = true;
+      studioSphere.material.map = bg; studioSphere.material.needsUpdate = true;
       W.envMountain = pmrem.fromEquirectangular(bg).texture;
       W.snowTextures = { snowD, snowNm, snowR };
       groundMat.map = pbr(snowD, [24, 24]); groundMat.normalMap = pbr(snowNm, [24, 24]); groundMat.normalScale = new THREE.Vector2(0.9, 0.9);

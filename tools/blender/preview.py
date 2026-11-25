@@ -15,7 +15,7 @@ for o in objs:
         w = o.matrix_world @ Vector(c); mn = Vector(map(min, mn, w)); mx = Vector(map(max, mx, w))
 ctr = (mn + mx) / 2; size = (mx - mn).length
 cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); bpy.context.collection.objects.link(cam)
-cam.location = ctr + Vector((0.55, -0.75, 0.45)) * size * 1.7
+cam.location = ctr + Vector((0.35, -0.9, 0.25)) * size * float(a[2] if len(a) > 2 else 1.7)
 d = ctr - cam.location; cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
 bpy.context.scene.camera = cam
 for loc, e in [((1, -1, 2), 4), ((-2, 1, 1), 2)]:

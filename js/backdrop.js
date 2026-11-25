@@ -14,7 +14,7 @@ function ridged(x, y) {
   return s;
 }
 
-function cloudTex() {
+function _unusedCloudTex() {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
   for (let i = 0; i < 40; i++) {
@@ -30,68 +30,14 @@ export function buildBackdrop(scene, { low = false } = {}) {
   const group = new THREE.Group();
   scene.add(group);
 
-  // ---- Cordillera en anillo ----
-  const SEG = low ? 260 : 420, ROWS = low ? 28 : 44, R0 = 48, R1 = 110;
-  const pos = [], col = [], idx = [];
-  const rock = new THREE.Color('#3a3f49'), rockDark = new THREE.Color('#23262d'), snow = new THREE.Color('#e9eef5'), c = new THREE.Color();
-  const H = [];
-  for (let j = 0; j <= ROWS; j++) {
-    const t = j / ROWS, r = R0 + (R1 - R0) * t;
-    for (let i = 0; i <= SEG; i++) {
-      const a = (i / SEG) * Math.PI * 2;
-      const nx = Math.cos(a) * 3.2, ny = Math.sin(a) * 3.2;
-      let h = ridged(nx + t * 1.7, ny + t * 1.3) * 26 * Math.pow(t, 0.6) + noise(nx * 4, ny * 4) * 2.5 * t;
-      h += Math.max(0, Math.sin(a * 3 + 1.2)) * 9 * t;          // cumbres más altas en algunos tramos
-      const y = -3.2 + h * (0.16 + 0.42 * t);
-      pos.push(Math.cos(a) * r, y, Math.sin(a) * r);
-      H.push(y);
-    }
-  }
-  for (let j = 0; j < ROWS; j++) for (let i = 0; i < SEG; i++) {
-    const a = j * (SEG + 1) + i, b = a + 1, c2 = a + SEG + 1, d = c2 + 1;
-    idx.push(a, c2, b, b, c2, d);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(idx); geo.computeVertexNormals();
-  const n = geo.attributes.normal;
-  for (let k = 0; k < H.length; k++) {
-    const slope = n.getY(k), y = H[k];
-    const snowAmt = THREE.MathUtils.smoothstep(slope, 0.5, 0.78) * THREE.MathUtils.smoothstep(y, -1, 4) + THREE.MathUtils.smoothstep(y, 7, 13) * 0.7;
-    c.copy(noise(k * 0.13, 3.1) > 0.5 ? rock : rockDark).lerp(snow, Math.min(1, snowAmt));
-    col.push(c.r, c.g, c.b);
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  const mountMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, flatShading: false, transparent: true });
-  const mountains = new THREE.Mesh(geo, mountMat);
-  group.add(mountains);
-
-  // ---- Suelo nevado ----
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0x46526a, roughness: 0.9, transparent: true });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 96), groundMat);
+  // ---- Suelo nevado que se funde con el lago helado del panorama ----
+  const fc = document.createElement('canvas'); fc.width = fc.height = 256;
+  { const g = fc.getContext('2d'); const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128); gr.addColorStop(0, '#fff'); gr.addColorStop(0.45, '#fff'); gr.addColorStop(1, '#000'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0xf1f4f8, roughness: 0.95, transparent: true, alphaMap: new THREE.CanvasTexture(fc), depthWrite: false });
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(38, 96), groundMat);
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.66; ground.receiveShadow = true;
   group.add(ground);
-
-  // ---- Bancos de niebla y nubes (se desplazan) ----
-  const ctex = cloudTex();
-  const clouds = [];
-  for (let i = 0; i < (low ? 10 : 18); i++) {
-    const m = new THREE.MeshBasicMaterial({ map: ctex, transparent: true, depthWrite: false, opacity: 0.5, fog: false, color: i % 3 ? 0x8a97ad : 0xc9a68c });
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(40, 12), m);
-    const a = Math.random() * Math.PI * 2, r = 55 + Math.random() * 35;
-    s.position.set(Math.cos(a) * r, 2 + Math.random() * 7, Math.sin(a) * r);
-    s.userData = { a, r, speed: (0.004 + Math.random() * 0.006) * (Math.random() < 0.5 ? 1 : -1), base: 0.25 + Math.random() * 0.35 };
-    group.add(s); clouds.push(s);
-  }
-  const mist = [];
-  for (let i = 0; i < 6; i++) {
-    const m = new THREE.MeshBasicMaterial({ map: ctex, transparent: true, depthWrite: false, opacity: 0.35, color: 0x6d7a90, fog: false });
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(60, 6), m);
-    const a = (i / 6) * Math.PI * 2;
-    s.position.set(Math.cos(a) * 30, 0.2, Math.sin(a) * 30);
-    s.userData = { a, r: 26, speed: 0.01 * (i % 2 ? 1 : -1), base: 0.4 };
-    group.add(s); mist.push(s);
-  }
+  const clouds = [], mist = [], mountMat = { opacity: 1 }, mountains = null;
 
   // ---- Nieve en GPU (con viento y rastro del cursor) ----
   const COUNT = low ? 1800 : 4200, BOX = new THREE.Vector3(24, 14, 24);
@@ -152,7 +98,7 @@ export function buildBackdrop(scene, { low = false } = {}) {
         s.lookAt(camera.position.x, s.position.y, camera.position.z);
         s.material.opacity = s.userData.base * studio;
       }
-      mountMat.opacity = studio; groundMat.opacity = studio;
+      groundMat.opacity = studio;
       group.visible = studio > 0.01;
       // viento: base + empujón del cursor
       const vx = (mx - lx) / Math.max(dt, 0.008), vy = (my - ly) / Math.max(dt, 0.008); lx = mx; ly = my;

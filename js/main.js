@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { buildWorld, poseRider, BOARD, THEMES } from './world.js';
 import { TRICKS, TIPS } from './content.js';
-import { createGame, RUN } from './game.js';
+const RUN = 900;
 import { initScroll, splitInto, loaderProgress, initBackground, initCursor } from './fx.js';
 import { buildBackdrop } from './backdrop.js';
 
@@ -492,7 +492,7 @@ const jumpKeys = { Space: 1, ArrowUp: 1, KeyW: 1 };
 addEventListener('keydown', (e) => { if (jumpKeys[e.code] && game.on) { input.kJ = true; e.preventDefault(); } });
 addEventListener('keyup', (e) => { if (jumpKeys[e.code]) input.kJ = false; });
 input.J = new Set();
-const jb = $('#jump-btn');
+const jb = $('#jump-btn') || document.createElement('button');
 jb.addEventListener('pointerdown', (e) => { e.preventDefault(); jb.setPointerCapture?.(e.pointerId); input.J.add(e.pointerId); jb.classList.add('down'); });
 for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) jb.addEventListener(ev, (e) => { input.J.delete(e.pointerId); if (!input.J.size) jb.classList.remove('down'); });
 jb.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -500,61 +500,9 @@ const inJ = () => input.kJ || input.J.size > 0;
 const inL = () => input.kL || input.L.size > 0 || demoOn('L');
 const inR = () => input.kR || input.R.size > 0 || demoOn('R');
 
-/* ---------------- Juego ---------------- */
-let gameMode = 'libre';
-const fmtTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
-function showBest() { const b = store.get('best-' + gameMode, 0); $('#best-score').textContent = b ? fmtTime(b) : '—'; }
-segGroup('[data-mode]', 'mode', (v) => { gameMode = v; showBest(); });
-showBest();
-let msgTimer, trickTimer;
-const gameUI = {
-  start(mode) {
-    document.body.classList.add('playing');
-    $('#game').hidden = false; $('#game-over').hidden = true;
-    $('#g-gates').textContent = mode === 'slalom' ? 'Puertas 0' : 'Pista roja';
-    closeSheet();
-  },
-  stop() { document.body.classList.remove('playing'); $('#game').hidden = true; },
-  countdown(v) { const m = $('#game-msg'); m.textContent = v; m.classList.add('on'); m.classList.remove('bad'); clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.remove('on'), 500); },
-  msg(t, bad) {
-    const m = $('#game-msg'); m.textContent = t; m.classList.add('on'); m.classList.toggle('bad', !!bad);
-    clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.remove('on'), 800);
-    if (bad) { const f = $('#flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); navigator.vibrate?.(80); }
-  },
-  trick(name, pts, combo, start) {
-    const el = $('#g-trick');
-    el.querySelector('b').textContent = name;
-    el.querySelector('span').textContent = start ? '' : `+${pts}${combo > 1 ? `  ×${combo} combo` : ''}`;
-    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
-    clearTimeout(trickTimer); trickTimer = setTimeout(() => el.classList.remove('on'), start ? 1400 : 1600);
-  },
-  hud(d) {
-    $('#g-score').textContent = d.score;
-    jb.style.setProperty('--charge', d.charge.toFixed(3));
-    jb.classList.toggle('air', d.state === 'air');
-    $('#g-speed').textContent = Math.round(d.kmh);
-    $('#g-time').textContent = fmtTime(d.time);
-    $('#g-prog').style.transform = `scaleX(${d.progress.toFixed(3)})`;
-    if (d.mode === 'slalom') $('#g-gates').textContent = `Puertas ${d.gates}`;
-  },
-  finish(r) {
-    $('#go-title').textContent = r.isBest ? '¡Nuevo récord!' : '¡Bajada completada!';
-    $('#go-time').textContent = fmtTime(r.time);
-    $('#go-top').textContent = Math.round(r.top * 3.6);
-    $('#go-gates-box').hidden = r.mode !== 'slalom';
-    $('#go-gates').textContent = `${r.gates}/${r.total}`;
-    $('#go-score').textContent = r.score;
-    $('#go-best').textContent = (r.isBest ? 'Tu mejor tiempo en esta pista.' : `Tu récord: ${fmtTime(r.best)}`) + ` · Récord de puntos: ${r.bestPts}`;
-    setTimeout(() => { $('#game-over').hidden = false; }, 900);
-    showBest();
-  },
-};
-const game = createGame({ W, camera, S, inL, inR, inJ, store, ui: gameUI, renderer, low: LOW });
-function quitGame() { game.stop(); W.shadow.quaternion.identity(); }
-$('#play-btn').addEventListener('click', async () => { $('#play-btn').classList.add('loading'); await W.loadOutdoor(); $('#play-btn').classList.remove('loading'); game.start(gameMode); });
-$('#again-btn').addEventListener('click', () => game.start(gameMode));
-$('#quit-btn').addEventListener('click', quitGame);
-$('#game-exit').addEventListener('click', quitGame);
+/* ---------------- Juego: ahora vive en juego.html ---------------- */
+const game = { on: false, update() { return null; }, start() {}, stop() {} };
+function quitGame() {}
 
 /* ---------------- Simulación en la pista de prácticas ---------------- */
 function stepSim(dt, mode, t) {
@@ -643,6 +591,8 @@ function stepTrail(dt, active, speed) {
 
 /* ---------------- Bucle ---------------- */
 const _fogDusk = new THREE.Color('#252d3c');
+let skyYaw = 0;
+const SKY_OFFSET = 2.35, SUN_OFFSET = 2.6;
 const studioTop = new THREE.Color('#07080b'), studioBot = new THREE.Color('#25272f');
 const slopeTop = new THREE.Color('#3576c8'), slopeBot = new THREE.Color('#e9f2fc');
 const footL = new THREE.Vector3(), footR = new THREE.Vector3(), _bdC = new THREE.Vector3();
@@ -840,22 +790,22 @@ function frame(now) {
   // Cielo y luces
   const day = game.on ? 1 : sl;
   const outdoor = !!W.envMountain;
-  W.bgSphere.material.opacity = outdoor ? day : 0;
-  W.bgSphere.visible = outdoor && day > 0.01;
-  W.studioSphere.material.opacity = game.on ? 0 : 1 - (outdoor ? day : 0);
-  W.studioSphere.visible = W.studioSphere.material.opacity > 0.01;
-  W.scene.environment = day > 0.5 && outdoor ? W.envMountain : W.envStudio;
-  document.body.classList.toggle('day', day > 0.6);
+  W.bgSphere.visible = false;
+  W.studioSphere.material.opacity = 1; W.studioSphere.visible = true;
+  W.scene.environment = outdoor ? W.envMountain : W.envStudio;
+  document.body.classList.add('day');
+  // el panorama gira con la cámara de cada paso para que los picos queden siempre detrás
+  { const yaw = Math.atan2(cur.cam[0] - cur.look[0], cur.cam[2] - cur.look[2]); skyYaw += wrapAngle(yaw - skyYaw) * (1 - Math.exp(-2 * dt)); W.studioSphere.rotation.y = skyYaw + SKY_OFFSET; }
   W.catcher.material.opacity = 0.38 * (1 - sl);
   const studioK = game.on ? 0 : 1 - (outdoor ? day : 0);
-  W.scene.fog.color.set('#dde5ee').lerp(_fogDusk, studioK);
-  W.scene.fog.near = game.on ? 70 : lerp(300, 6, studioK);
-  W.scene.fog.far = game.on ? 700 : lerp(600, 120, studioK);
-  if (!game.on) { W.key.position.set(lerp(2.2, -3.2, day), lerp(4.5, 4.6, day), lerp(1.6, 5.5, day)); W.key.target.position.set(0, 0, 0); }
-  W.hemi.intensity = lerp(0.6, 1.25, day);
-  W.warm.intensity = lerp(1.6, 0, day);
-  W.rim.intensity = lerp(1.4, 0.3, day);
-  renderer.toneMappingExposure = lerp(1.0, 0.95, day);
+  W.scene.fog.color.set('#cfd9e5');
+  W.scene.fog.near = 30; W.scene.fog.far = 220;
+  // sol del panorama: luz principal desde arriba-detrás, como en la foto
+  W.key.position.set(Math.sin(skyYaw + SUN_OFFSET) * 5, 6, Math.cos(skyYaw + SUN_OFFSET) * 5); W.key.target.position.set(0, 0, 0);
+  W.hemi.intensity = 0.9;
+  W.warm.intensity = 0;
+  W.rim.intensity = 0.6;
+  renderer.toneMappingExposure = 0.95;
 
   // Cámara
   if (!game.on) {
@@ -881,7 +831,7 @@ function frame(now) {
 
   // Fondo vivo: cordillera, niebla, nubes y nieve con viento
   {
-    const studioK = game.on ? 0 : 1 - (W.envMountain ? day : 0);
+    const studioK = 1 - sl;
     const c = riderOpt ? riderOpt.flakeAt : _bdC.set(cur.look[0], cur.look[1], cur.look[2]);
     BD.update(t, dt, { studio: studioK, center: c, camera, speedZ: game.on ? 0 : speed, fall: 1 });
   }

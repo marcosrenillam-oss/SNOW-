@@ -12,7 +12,9 @@ Tablas: la blanca del oso (Drake, fijaciones negras) y la negra de la serpiente 
 ## Pasos de la clase
 0. Inicio · 1. Tu tabla · 2. Fijaciones · 3. ¿Regular o goofy? (test) · 4. Postura base
 5. **Método de los pedales** · 6. Front y back · 7. Hoja muerta · 8. Tu primer giro · 9. Trucos
-10. **La bajada**: pista roja de 900 m estilo Formigal (bajada libre o slalom) · 11. Consejos · 12. Instalar
+10. Consejos · 11. Instalar
+
+El juego (**La bajada**, pista roja de 900 m con snowpark) vive aparte en `juego.html` (`js/play.js`).
 
 ## Probar en local
 ```bash
@@ -44,3 +46,6 @@ Es una web estática: se puede publicar tal cual en GitHub Pages, Vercel o Netli
 Las fijaciones y la bota están modeladas en Blender por código (`tools/blender/binding.py`) y exportadas a `assets/models/binding.glb`.
 Para regenerarlas: `blender --background --factory-startup --python tools/blender/binding.py -- assets/models/binding.glb`
 (`tools/blender/preview.py` hace un render de comprobación con Cycles).
+
+El avatar (cabeza estilo animación, gorro con pompón y gafas) también está modelado en Blender: `tools/blender/avatar.py` → `assets/models/avatar.glb`.
+Fondo: panorama real de los Alpes `lago_disola` (Poly Haven, CC0).
