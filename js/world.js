@@ -1,6 +1,7 @@
 // Objetos 3D: tus tablas (texturas sacadas de tus fotos), fijaciones, botas, rider y pista de prácticas.
 import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
+import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 
 export const BOARD = {
   half: 0.8,        // 1,6 m
@@ -608,6 +609,40 @@ export function poseRider(rider, footL, footR, o) {
   P.aHead.position.copy(P.head.position).add(V.t.set(0, 0.1, 0));
 }
 
+
+/* ================= Piezas modeladas en Blender ================= */
+function upgradeBinding(b, gltf, mats) {
+  if (!gltf) return;
+  const P = b.userData.parts;
+  const MAP = { Frame: mats.frame, High: mats.high, Strap: mats.strap, Pad: mats.pad, Metal: mats.detail, Disc: mats.disc, Screw: mats.screw, Boot: mats.boot, Sole: mats.bootDark, Lace: mats.bootDark, Accent: mats.bootAccent };
+  const take = (name) => {
+    const src = gltf.scene.getObjectByName(name);
+    if (!src) return null;
+    const c = src.clone(true);
+    c.traverse((o) => { if (o.isMesh) { o.material = MAP[o.material.name] || mats.frame; o.castShadow = true; o.receiveShadow = true; } });
+    return c;
+  };
+  const swap = (group, name) => {
+    const m = take(name); if (!m) return;
+    for (const ch of [...group.children]) if (ch.isMesh || ch.userData.proc) group.remove(ch);
+    m.position.set(0, 0, 0); m.userData.proc = true; group.add(m);
+  };
+  // disco: geometría nueva + tornillos de cabeza hexagonal
+  const disc = take('Disc');
+  if (disc) {
+    const mesh = disc.isMesh ? disc : disc.children.find((c) => c.isMesh);
+    P.disc.geometry = mesh.geometry; P.disc.material = mats.disc;
+    for (const ch of [...P.disc.children]) if (ch.isMesh) P.disc.remove(ch);
+    const sc = take('Screws');
+    if (sc) { sc.position.y -= 0.004; P.disc.add(sc); P.screws = [sc]; }
+  }
+  swap(P.frame, 'Frame');
+  swap(P.highback, 'Highback');
+  swap(P.ankle, 'Ankle');
+  swap(P.toe, 'Toe');
+  swap(P.boot, 'BootModel');
+}
+
 /* ================= Mundo ================= */
 export async function buildWorld(renderer) {
   const scene = new THREE.Scene();
@@ -644,9 +679,10 @@ export async function buildWorld(renderer) {
   scene.add(hemi, key, rim, warm, fill);
 
   // Carga mínima para arrancar rápido: tablas + fondo de estudio. Lo de exterior se carga después.
-  const [dTop, dBase, sTop, sBase, studioBg] = await Promise.all([
+  const [dTop, dBase, sTop, sBase, studioBg, bindGltf] = await Promise.all([
     ...['drake-top', 'drake-base', 'snake-top', 'snake-base'].map((n) => loadTex(`assets/${n}.jpg`, renderer)),
     loadTex('assets/env/studio-bg.jpg', renderer),
+    new GLTFLoader().loadAsync('assets/models/binding.glb').catch(() => null),
   ]);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const envStudio = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -667,17 +703,18 @@ export async function buildWorld(renderer) {
   };
   const grain = grainNormal(renderer); grain.repeat.set(10, 2);
   const mats = {
-    top: new THREE.MeshPhysicalMaterial({ map: dTop, color: 0xe9e9e9, roughness: 0.5, clearcoat: 0.55, clearcoatRoughness: 0.12, normalMap: grain, normalScale: new THREE.Vector2(0.05, 0.05), envMapIntensity: 0.32 }),
-    base: new THREE.MeshPhysicalMaterial({ map: dBase, roughness: 0.42, clearcoat: 0.35, clearcoatRoughness: 0.3, envMapIntensity: 0.7 }),
-    side: new THREE.MeshStandardMaterial({ map: skins.drake.side, roughness: 0.3, metalness: 0.45 }),
-    frame: new THREE.MeshPhysicalMaterial({ color: 0x17181c, roughness: 0.45, clearcoat: 0.3, side: THREE.DoubleSide }),
-    high: new THREE.MeshPhysicalMaterial({ color: 0x111215, roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.25, side: THREE.DoubleSide }),
-    strap: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.8 }),
-    pad: new THREE.MeshStandardMaterial({ color: 0x26282e, roughness: 0.9 }),
-    detail: new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.25, metalness: 0.9 }),
+    top: new THREE.MeshPhysicalMaterial({ map: dTop, color: 0xe6e6e6, roughness: 0.58, clearcoat: 0.18, clearcoatRoughness: 0.45, normalMap: grain, normalScale: new THREE.Vector2(0.08, 0.08), envMapIntensity: 0.4 }),
+    base: new THREE.MeshPhysicalMaterial({ map: dBase, roughness: 0.55, clearcoat: 0.05, envMapIntensity: 0.5 }),
+    side: new THREE.MeshStandardMaterial({ map: skins.drake.side, roughness: 0.42, metalness: 0.3 }),
+    frame: new THREE.MeshPhysicalMaterial({ color: 0x17181c, roughness: 0.66, sheen: 0.25, sheenRoughness: 0.8, side: THREE.DoubleSide, envMapIntensity: 0.55 }),
+    high: new THREE.MeshPhysicalMaterial({ color: 0x111215, roughness: 0.55, sheen: 0.3, sheenRoughness: 0.7, side: THREE.DoubleSide, envMapIntensity: 0.55 }),
+    strap: new THREE.MeshPhysicalMaterial({ color: 0x1d1f24, roughness: 0.86, sheen: 0.6, sheenRoughness: 0.6, envMapIntensity: 0.4 }),
+    pad: new THREE.MeshPhysicalMaterial({ color: 0x26282e, roughness: 0.95, sheen: 0.7, sheenRoughness: 0.5 }),
+    detail: new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.38, metalness: 0.85 }),
+    screw: new THREE.MeshStandardMaterial({ color: 0xb4b9c0, roughness: 0.32, metalness: 1 }),
     accent: new THREE.MeshStandardMaterial({ color: 0x2c2f36, roughness: 0.5 }),
-    disc: new THREE.MeshStandardMaterial({ color: 0x2b2f37, roughness: 0.35, metalness: 0.6 }),
-    boot: new THREE.MeshStandardMaterial({ color: 0x24272e, roughness: 0.62, transparent: true }),
+    disc: new THREE.MeshStandardMaterial({ color: 0x2b2f37, roughness: 0.5, metalness: 0.35 }),
+    boot: new THREE.MeshPhysicalMaterial({ color: 0x24272e, roughness: 0.78, sheen: 0.5, sheenRoughness: 0.6, transparent: true }),
     bootDark: new THREE.MeshStandardMaterial({ color: 0x0f1013, roughness: 0.7, transparent: true }),
     bootAccent: new THREE.MeshStandardMaterial({ color: 0xe5233d, roughness: 0.5, transparent: true }),
   };
@@ -693,6 +730,7 @@ export async function buildWorld(renderer) {
   const bindL = makeBinding(mats), bindR = makeBinding(mats);
   bindL.position.set(BOARD.stance, lift(BOARD.stance) + BOARD.T / 2, 0);
   bindR.position.set(-BOARD.stance, lift(BOARD.stance) + BOARD.T / 2, 0);
+  upgradeBinding(bindL, bindGltf, mats); upgradeBinding(bindR, bindGltf, mats);
   boardGroup.add(bindL, bindR);
 
   const glowTex = radialTex();
@@ -810,6 +848,7 @@ export async function buildWorld(renderer) {
       groundMat.map = pbr(snowD, [24, 24]); groundMat.normalMap = pbr(snowNm, [24, 24]); groundMat.normalScale = new THREE.Vector2(0.9, 0.9);
       groundMat.roughnessMap = pbr(snowR, [24, 24]); groundMat.needsUpdate = true;
       applyFabric(rider, fN, fR);
+      for (const m of [mats.strap, mats.pad, mats.boot]) { const n = fN.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(6, 6); m.normalMap = n; m.normalScale = new THREE.Vector2(0.6, 0.6); m.needsUpdate = true; }
       return W;
     });
     return outdoorP;

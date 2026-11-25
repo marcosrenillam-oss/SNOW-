@@ -39,3 +39,8 @@ Es una web estática: se puede publicar tal cual en GitHub Pages, Vercel o Netli
 - Arranque ligero (tablas + fondo de estudio, ~0,5 MB); cielo, nieve y tejidos se cargan después.
 - Calidad adaptativa: baja la resolución si el móvil no llega a ~45 fps y la sube si sobra.
 - En móvil: sombras más ligeras, menos copos y pinos, sin desenfoques caros.
+
+## Modelos 3D (Blender)
+Las fijaciones y la bota están modeladas en Blender por código (`tools/blender/binding.py`) y exportadas a `assets/models/binding.glb`.
+Para regenerarlas: `blender --background --factory-startup --python tools/blender/binding.py -- assets/models/binding.glb`
+(`tools/blender/preview.py` hace un render de comprobación con Cycles).

@@ -4,6 +4,7 @@ import { buildWorld, poseRider, BOARD, THEMES } from './world.js';
 import { TRICKS, TIPS } from './content.js';
 import { createGame, RUN } from './game.js';
 import { initScroll, splitInto, loaderProgress, initBackground, initCursor } from './fx.js';
+import { buildBackdrop } from './backdrop.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -74,7 +75,11 @@ loaderProgress(0.3);
 const W = await buildWorld(renderer);
 loaderProgress(0.85);
 W.scene.environment = W.envStudio;
-if (LOW) { W.key.shadow.mapSize.set(1024, 1024); W.flakes.geometry.setDrawRange(0, 600); }
+if (LOW) W.key.shadow.mapSize.set(1024, 1024);
+W.flakes.visible = false;
+W.catcher.visible = false;
+const BD = buildBackdrop(W.scene, { low: LOW });
+W.hemi.color.set(0xb9c7e0); W.hemi.groundColor.set(0x2a2d36);
 W.boardGroup.add(W.layers);
 W.sky.visible = false;
 const scroller = initScroll();
@@ -166,7 +171,7 @@ function dampPose(target, dt, rate) {
   if (!cur) { cur = JSON.parse(JSON.stringify(target)); return; }
   for (const k in target) {
     if (Array.isArray(target[k])) for (let i = 0; i < 3; i++) cur[k][i] = damp(cur[k][i], target[k][i], rate, dt);
-    else cur[k] = damp(cur[k], target[k], rate, dt);
+    else cur[k] = damp(cur[k], target[k], (k === 'layers' || k === 'bexp') && target[k] < cur[k] ? rate * 2.2 : rate, dt);
   }
 }
 
@@ -637,9 +642,10 @@ function stepTrail(dt, active, speed) {
 }
 
 /* ---------------- Bucle ---------------- */
+const _fogDusk = new THREE.Color('#252d3c');
 const studioTop = new THREE.Color('#07080b'), studioBot = new THREE.Color('#25272f');
 const slopeTop = new THREE.Color('#3576c8'), slopeBot = new THREE.Color('#e9f2fc');
-const footL = new THREE.Vector3(), footR = new THREE.Vector3();
+const footL = new THREE.Vector3(), footR = new THREE.Vector3(), _bdC = new THREE.Vector3();
 let vw = 0, vh = 0, mobile = false, offX = 0, offY = 0, clock = 0, lastT = performance.now();
 const statusEl = $('#pedal-status');
 const meters = $$('.pedal .meter b').map((b) => ({ b, side: b.closest('.pedal').dataset.pedal }));
@@ -841,9 +847,10 @@ function frame(now) {
   W.scene.environment = day > 0.5 && outdoor ? W.envMountain : W.envStudio;
   document.body.classList.toggle('day', day > 0.6);
   W.catcher.material.opacity = 0.38 * (1 - sl);
-  W.scene.fog.color.set('#dde5ee');
-  W.scene.fog.near = game.on ? 70 : 300;
-  W.scene.fog.far = game.on ? 700 : 600;
+  const studioK = game.on ? 0 : 1 - (outdoor ? day : 0);
+  W.scene.fog.color.set('#dde5ee').lerp(_fogDusk, studioK);
+  W.scene.fog.near = game.on ? 70 : lerp(300, 6, studioK);
+  W.scene.fog.far = game.on ? 700 : lerp(600, 120, studioK);
   if (!game.on) { W.key.position.set(lerp(2.2, -3.2, day), lerp(4.5, 4.6, day), lerp(1.6, 5.5, day)); W.key.target.position.set(0, 0, 0); }
   W.hemi.intensity = lerp(0.6, 1.25, day);
   W.warm.intensity = lerp(1.6, 0, day);
@@ -872,19 +879,12 @@ function frame(now) {
   W.bgSphere.position.copy(camera.position);
   W.studioSphere.position.copy(camera.position);
 
-  // Copos
-  const fp = W.flakes.geometry.attributes.position, fa = fp.array, fs = W.flakes.userData.speed;
-  for (let i = 0; i < fs.length; i++) {
-    fa[i * 3 + 1] -= fs[i] * dt;
-    fa[i * 3] += Math.sin(t * 0.7 + i) * 0.08 * dt;
-    fa[i * 3 + 2] -= speed * dt * 0.9;
-    if (fa[i * 3 + 1] < -2) fa[i * 3 + 1] += 9;
-    if (fa[i * 3 + 2] < -9) fa[i * 3 + 2] += 18;
+  // Fondo vivo: cordillera, niebla, nubes y nieve con viento
+  {
+    const studioK = game.on ? 0 : 1 - (W.envMountain ? day : 0);
+    const c = riderOpt ? riderOpt.flakeAt : _bdC.set(cur.look[0], cur.look[1], cur.look[2]);
+    BD.update(t, dt, { studio: studioK, center: c, camera, speedZ: game.on ? 0 : speed, fall: 1 });
   }
-  fp.needsUpdate = true;
-  if (riderOpt) W.flakes.position.set(riderOpt.flakeAt.x, riderOpt.flakeAt.y - 1, riderOpt.flakeAt.z);
-  else W.flakes.position.set(cur.look[0], 0, cur.look[2]);
-
   for (const m of meters) m.b.style.transform = `scaleX(${(m.side === 'L' ? S.pL : S.pR).toFixed(3)})`;
   if (modeId === 'pedales' && !game.on) {
     const d = S.pL - S.pR;
