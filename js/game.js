@@ -51,10 +51,60 @@ function bannerTex(text, bg) {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 160;
   const g = c.getContext('2d');
   g.fillStyle = bg; g.fillRect(0, 0, 1024, 160);
-  g.fillStyle = '#fff'; g.font = '900 92px "Archivo", "Arial Black", sans-serif';
+  g.fillStyle = '#fff'; g.font = '800 84px "Inter Tight", "Arial Black", sans-serif';
   g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 512, 86);
   g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(0, 0, 1024, 8); g.fillRect(0, 152, 1024, 8);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+
+
+// Pino realista: pisos de ramas caídas, con nieve en las caras de arriba
+function pineGeometry(seed) {
+  const r = rnd(seed);
+  const pos = [], col = [];
+  const green = [new THREE.Color('#1b3029'), new THREE.Color('#223a31'), new THREE.Color('#2b4436')], snowC = new THREE.Color('#eef3f8'), bark = new THREE.Color('#3b2c22');
+  const tri = (a, b, c, color) => { pos.push(...a, ...b, ...c); for (let i = 0; i < 3; i++) col.push(color.r, color.g, color.b); };
+  const H = 5.2, tiers = 8;
+  for (let t = 0; t < tiers; t++) {
+    const u = t / (tiers - 1);
+    const y0 = 0.7 + u * (H - 1.2), rad = 1.7 * (1 - u * 0.86) + 0.15, drop = 0.55 + (1 - u) * 0.35;
+    const seg = 11;
+    const ring = [];
+    for (let i = 0; i < seg; i++) {
+      const a = (i / seg) * Math.PI * 2 + r() * 0.3;
+      const rr = rad * (0.78 + r() * 0.4);
+      ring.push([Math.cos(a) * rr, y0 - drop * (0.8 + r() * 0.4), Math.sin(a) * rr, a]);
+    }
+    const apex = [0, y0 + 0.55 + (1 - u) * 0.2, 0];
+    for (let i = 0; i < seg; i++) {
+      const A = ring[i], B = ring[(i + 1) % seg];
+      // punta intermedia (rama) entre A y B
+      const am = (A[3] + B[3]) / 2 + (B[3] < A[3] ? Math.PI : 0);
+      const M = [Math.cos(am) * rad * 0.62, (A[1] + B[1]) / 2 + 0.18, Math.sin(am) * rad * 0.62];
+      const g = green[Math.floor(r() * 3)];
+      tri(apex, [B[0], B[1], B[2]], [A[0], A[1], A[2]], g);
+      tri([A[0], A[1], A[2]], [B[0], B[1], B[2]], M, g);
+    }
+  }
+  // tronco
+  for (let i = 0; i < 6; i++) {
+    const a0 = (i / 6) * Math.PI * 2, a1 = ((i + 1) / 6) * Math.PI * 2, R0 = 0.16, R1 = 0.1;
+    const p0 = [Math.cos(a0) * R0, 0, Math.sin(a0) * R0], p1 = [Math.cos(a1) * R0, 0, Math.sin(a1) * R0];
+    const q0 = [Math.cos(a0) * R1, 1.4, Math.sin(a0) * R1], q1 = [Math.cos(a1) * R1, 1.4, Math.sin(a1) * R1];
+    tri(p0, q0, p1, bark); tri(p1, q0, q1, bark);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  // nieve en las caras que miran arriba
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i += 3) {
+    const ny = (n.getY(i) + n.getY(i + 1) + n.getY(i + 2)) / 3;
+    const y = pos[i * 3 + 1];
+    if (y > 0.5 && ny > 0.45 + r() * 0.25) for (let k = 0; k < 3; k++) { col[(i + k) * 3] = snowC.r; col[(i + k) * 3 + 1] = snowC.g; col[(i + k) * 3 + 2] = snowC.b; }
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return geo;
 }
 
 function buildMountain(W, renderer) {
@@ -76,29 +126,26 @@ function buildMountain(W, renderer) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
   geo.computeVertexNormals();
-  const map = W.snowMap.clone(); map.needsUpdate = true; map.repeat.set(WID / 5, LEN / 5);
-  const nmap = snowNormal(renderer); nmap.repeat.set(WID / 3, LEN / 3);
-  const snowMat = new THREE.MeshStandardMaterial({ vertexColors: true, map, normalMap: nmap, normalScale: new THREE.Vector2(0.55, 0.55), roughness: 0.82 });
+  const tile = (t, n) => { const c = t.clone(); c.needsUpdate = true; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(WID / n, LEN / n); c.anisotropy = renderer.capabilities.getMaxAnisotropy(); return c; };
+  const { snowD, snowNm, snowR } = W.snowTextures;
+  const map = tile(snowD, 4), nmap = tile(snowNm, 4), rmap = tile(snowR, 4);
+  const snowMat = new THREE.MeshStandardMaterial({ vertexColors: true, map, normalMap: nmap, normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: rmap, roughness: 1, envMapIntensity: 0.9 });
   const terrain = new THREE.Mesh(geo, snowMat);
   terrain.receiveShadow = true;
   group.add(terrain);
 
   // Pinos
-  const N = 760;
-  const parts = [
-    [new THREE.ConeGeometry(1.0, 2.3, 8), 0x1d3a33, 1.5],
-    [new THREE.ConeGeometry(0.78, 1.9, 8), 0x24453d, 2.4],
-    [new THREE.ConeGeometry(0.46, 1.1, 8), 0xf3f7fc, 3.25],
-    [new THREE.CylinderGeometry(0.12, 0.16, 0.9, 6), 0x4a3426, 0.45],
-  ];
-  const inst = parts.map(([g, col, y]) => { g.translate(0, y, 0); const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, flatShading: true }), N); m.castShadow = true; group.add(m); return m; });
+  const N = 820;
+  const pineMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
+  const inst = [pineGeometry(7), pineGeometry(19)].map((g) => { const m = new THREE.InstancedMesh(g, pineMat, N); m.castShadow = true; m.receiveShadow = true; group.add(m); return m; });
+  const hide = new THREE.Matrix4().makeScale(0, 0, 0);
   const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
     const z = -80 + r() * (RUN + 200), side = r() < 0.5 ? -1 : 1;
     const d = 3.5 + Math.pow(r(), 1.6) * 90;
-    const x = centerX(z) + side * (pisteW(z) / 2 + d), s = 0.8 + r() * 1.1;
+    const x = centerX(z) + side * (pisteW(z) / 2 + d), s = 0.75 + r() * 0.9;
     p.set(x, H(x, z) - 0.25, z); q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6); sc.set(s, s * (0.9 + r() * 0.4), s);
-    mtx.compose(p, q, sc); for (const m of inst) m.setMatrixAt(i, mtx);
+    mtx.compose(p, q, sc); inst[i % 2].setMatrixAt(i, mtx); inst[(i + 1) % 2].setMatrixAt(i, hide);
   }
 
   // Jalones rojos
@@ -176,20 +223,6 @@ function buildMountain(W, renderer) {
     seatI.instanceMatrix.needsUpdate = true; hangI.instanceMatrix.needsUpdate = true;
   };
 
-  // Picos del Pirineo
-  const rock = new THREE.MeshStandardMaterial({ color: 0x5d6470, roughness: 1, flatShading: true });
-  const snow = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.9, flatShading: true });
-  const peak = (x, z, rad, hgt, base, cap = 0.42) => {
-    const segs = 6 + Math.floor(r() * 3);
-    const m = new THREE.Mesh(new THREE.ConeGeometry(rad, hgt, segs, 1), rock); m.position.set(x, base + hgt / 2, z); m.rotation.y = r() * 6; group.add(m);
-    const s = new THREE.Mesh(new THREE.ConeGeometry(rad * cap, hgt * cap, segs, 1), snow); s.position.set(x, base + hgt - (hgt * cap) / 2 + 0.5, z); s.rotation.y = m.rotation.y; group.add(s);
-  };
-  const ground = (z) => baseY(clamp(z, 0, RUN)) - 80;
-  for (let i = 0; i < 26; i++) { const side = i % 2 ? 1 : -1, z = -150 + (i / 26) * (RUN + 350); peak(side * (230 + r() * 260), z, 110 + r() * 140, 180 + r() * 230, ground(z), 0.38 + r() * 0.15); }
-  for (let i = 0; i < 7; i++) { const z = RUN + 380 + r() * 300; peak(-420 + i * 140 + r() * 60, z, 140 + r() * 120, 220 + r() * 200, ground(z), 0.36 + r() * 0.1); }
-  peak(70, RUN + 520, 120, 470, baseY(RUN) - 120, 0.22);
-  peak(150, RUN + 560, 80, 330, baseY(RUN) - 120, 0.3);
-
   const arch = (z, text, color) => {
     const cx = centerX(z), w = pisteW(z) + 2, y = H(cx, z);
     const postMat = new THREE.MeshStandardMaterial({ color: 0x1b1d23 });
@@ -200,15 +233,6 @@ function buildMountain(W, renderer) {
   arch(16, 'SALIDA · PISTA ROJA', '#e5233d');
   arch(195, 'SNOWPARK', '#111216');
   arch(RUN - 30, 'META', '#111216');
-
-  const wall = new THREE.MeshStandardMaterial({ color: 0xd6cfc4, roughness: 0.9 });
-  const roof = new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.8, flatShading: true });
-  for (let i = 0; i < 14; i++) {
-    const z = RUN + 10 + r() * 90, side = r() < 0.5 ? -1 : 1, x = centerX(z) + side * (pisteW(z) / 2 + 14 + r() * 50);
-    const w = 8 + r() * 10, h = 6 + r() * 12, dpt = 8 + r() * 8;
-    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, dpt), wall); b.position.set(x, H(x, z) + h / 2 - 1, z); group.add(b);
-    const rf = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, dpt) * 0.75, 4, 4), roof); rf.position.set(x, H(x, z) + h + 1, z); rf.rotation.y = Math.PI / 4; group.add(rf);
-  }
 
   const gateGroup = new THREE.Group(); group.add(gateGroup);
   const gates = [];
@@ -446,7 +470,7 @@ export function createGame(ctx) {
     W.shadow.material.opacity = 0.4 * clamp(1 - hAbove / 4, 0.15, 1);
     W.shadow.scale.setScalar(1 + hAbove * 0.15);
     W.key.target.position.set(R.x, R.y, R.z);
-    W.key.position.set(R.x + 16, R.y + 30, R.z - 8);
+    W.key.position.set(R.x + 12, R.y + 20, R.z + 26);
 
     // Cámara
     R.hc = damp(R.hc, R.h, 2.4, dt);

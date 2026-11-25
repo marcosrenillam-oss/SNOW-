@@ -29,3 +29,8 @@ y abrir http://localhost:8080
 - Estilos: `styles.css`
 
 Es una web estática: se puede publicar tal cual en GitHub Pages, Vercel o Netlify (necesita HTTPS para instalarse como app).
+
+## Recursos
+- Texturas de las tablas: sacadas de tus fotos (`tools/textures/` regenera).
+- Cielos HDRI y nieve PBR: [Poly Haven](https://polyhaven.com) (CC0) — `horn-koppe_snow`, `studio_small_09`, `snow_02`.
+- Scroll suave: [Lenis](https://github.com/darkroomengineering/lenis) (MIT).

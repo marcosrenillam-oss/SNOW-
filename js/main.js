@@ -3,6 +3,7 @@ import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { buildWorld, poseRider, BOARD, THEMES } from './world.js';
 import { TRICKS, TIPS } from './content.js';
 import { createGame, RUN } from './game.js';
+import { initScroll, splitInto, loaderProgress, initBackground, initCursor } from './fx.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -48,7 +49,9 @@ S.dir = S.stance === 'goofy' ? -1 : 1;
 
 /* ---------------- Render ---------------- */
 const canvas = $('#scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+loaderProgress(0.08);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -59,13 +62,20 @@ const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 3000);
 
 try {
   await Promise.race([
-    Promise.all([document.fonts.load('900 64px Archivo'), document.fonts.load('800 64px Archivo')]),
+    Promise.all([document.fonts.load('400 64px "Instrument Serif"'), document.fonts.load('800 64px "Inter Tight"')]),
     new Promise((r) => setTimeout(r, 2500)),
   ]);
 } catch { /* fuente de reserva */ }
 
+loaderProgress(0.3);
 const W = await buildWorld(renderer);
-W.scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+loaderProgress(0.85);
+W.scene.environment = W.envStudio;
+W.boardGroup.add(W.layers);
+W.sky.visible = false;
+const scroller = initScroll();
+const bgfx = initBackground();
+const cursorFx = initCursor();
 W.setSkin(S.skin);
 const P = W.rider.userData.P;
 const studio = { top: new THREE.Color('#07080b'), bot: new THREE.Color('#25272f') };
@@ -76,7 +86,7 @@ const parts = (b) => b.userData.parts;
 
 /* ---------------- Secciones ---------------- */
 const sections = $$('.step').map((el, i) => ({
-  el, id: el.id, i, title: el.dataset.title, hint: el.dataset.hint, top: 0, h: 1,
+  el, id: el.id, i, title: el.dataset.title, hint: el.dataset.hint, big: el.dataset.big || el.dataset.title, lead: el.dataset.lead || '', top: 0, h: 1,
   dock: el.querySelector('.dock'), infos: el.querySelector('.infos'),
 }));
 const byId = Object.fromEntries(sections.map((s) => [s.id, s]));
@@ -88,7 +98,7 @@ function measure() {
 /* ---------------- Poses por paso ---------------- */
 const DEF = {
   cam: [0, 0.3, 3.4], look: [0, 0, 0], pos: [0, 0, 0], rot: [0, 0, 0],
-  explode: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0, crouch: 0.5, trick: 0, mk: 1,
+  explode: 0, layers: 0, bexp: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0, crouch: 0.5, trick: 0, mk: 1,
 };
 const pose = (o) => ({ ...DEF, ...o });
 const GROUND = 0.012;
@@ -100,23 +110,25 @@ const POSES = {
     pos: [0, Math.sin(t * 1.1) * 0.05, 0],
     rot: [0.28, 0.75 + Math.sin(t * 0.45) * 0.45, 1.02 + Math.sin(t * 0.7) * 0.05],
   }),
-  tabla: (t) => {
+  tabla: (t, p = 0.5) => {
     const f = F(), nx = 0.55 * S.dir;
-    let cam = [0, 1.75, 2.55], look = [0, -0.02, 0], ry = -0.3 + Math.sin(t * 0.3) * 0.12, rx = 0;
+    const e = f ? 0 : smooth(0.2, 0.42, p) - smooth(0.66, 0.86, p);
+    let cam = mix3([0, 1.75, 2.55], [1.7, 1.45, 3.1], e), look = mix3([0, -0.02, 0], [0.05, 0.1, 0], e), ry = -0.3 + Math.sin(t * 0.3) * 0.12 + e * (-0.35 + (p - 0.5) * 0.8), rx = 0;
     if (f === 'nose') { cam = [nx * 1.9, 0.8, 1.35]; look = [nx, 0.03, 0]; ry = 0; }
     if (f === 'tail') { cam = [-nx * 1.9, 0.8, 1.35]; look = [-nx, 0.03, 0]; ry = 0; }
     if (f === 'cantos') { cam = [0.4, 0.22, 1.25]; look = [0.05, 0.0, 0.1]; ry = 0.1; }
     if (f === 'rocker') { cam = [0, 0.1, 2.6]; look = [0, 0.04, 0]; ry = 0; }
     if (f === 'base') { rx = Math.PI; }
-    return pose({ cam, look, rot: [rx, ry, 0], pos: [0, Math.sin(t) * 0.02, 0], edges: f === 'cantos' ? 1 : 0.35, mk: 0.6 });
+    return pose({ cam, look, rot: [rx, ry, 0], pos: [0, Math.sin(t) * 0.02, 0], edges: f === 'cantos' ? 1 : 0.35 * (1 - e), layers: e, mk: 0.6 + e * 0.5 });
   },
-  fijaciones: () => {
+  fijaciones: (t, p = 0.5) => {
     const f = F(), x = S.dir * BOARD.stance;
-    let cam = [x + 0.62, 0.55, 0.78], look = [x * 0.9, 0.09, 0];
+    const e = f ? 0 : smooth(0.18, 0.42, p) - smooth(0.68, 0.88, p);
+    let cam = mix3([x + 0.62, 0.55, 0.78], [x + 1.15, 0.85, 1.45], e), look = mix3([x * 0.9, 0.09, 0], [x * 0.95, 0.17, 0], e);
     if (f === 'angulos') { cam = [0, 2.3, -0.75]; look = [0, 0, 0.02]; }
     if (f === 'highback') { cam = [x + 0.7, 0.45, -0.55]; look = [x, 0.14, -0.05]; }
     if (f === 'disco') { cam = [x + 0.55, 0.35, 0.7]; look = [x, 0.06, 0]; }
-    return pose({ cam, look, rot: [0, f === 'angulos' ? 0 : -0.12, 0], mk: f === 'angulos' ? 1.25 : 0.6 });
+    return pose({ cam, look, rot: [0, f === 'angulos' ? 0 : -0.12 + (p - 0.5) * 0.5 * e, 0], bexp: e, mk: f === 'angulos' ? 1.25 : 0.6 + e * 0.4 });
   },
   stance: () => pose({ cam: [0, 3.3, -1.3], look: [0, 0, 0.06], boots: 1, arrow: 1, mk: 0.85 }),
   postura: () => {
@@ -128,15 +140,16 @@ const POSES = {
     if (f === 'cadera') { cam = [2.6, 1.0, 1.4]; look = [0, 0.7, 0]; }
     return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.4 });
   },
-  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.3, -3.7], look: [S.sim.x * 0.5, 0.55, 0.8], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
+  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.7, -4.7], look: [S.sim.x * 0.5, 0.5, 1.0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
   cantos: () => pose({ cam: [3.4, 1.15, -1.7], look: [0, 0.6, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.4 }),
   hoja: () => pose({ cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.35, 1.3], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
   giro: () => pose({ cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.2, 1.7], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7 }),
-  trucos: () => pose({ cam: [2.9, 1.45, -2.9], look: [0, 0.85, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5 }),
+  trucos: () => pose({ cam: [3.5, 1.7, -3.5], look: [0, 0.8, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5 }),
   juego: () => pose({ cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1 }),
   consejos: (t) => pose({ cam: [0, 0.2, 3.9], look: [0, 0, 0], pos: [0, Math.sin(t) * 0.04, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
   final: (t) => pose({ cam: [0, 0.1, 3.3], look: [0, 0, 0], pos: [0, Math.sin(t * 1.3) * 0.06, 0], rot: [0.2, t * 0.8, 1.05] }),
 };
+function mix3(a, b, k) { return [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)]; }
 const SIM_MODE = { pedales: 'drill', cantos: 'hold', hoja: 'leaf', giro: 'turn', juego: 'leaf' };
 
 function mixPose(a, b, f) {
@@ -154,7 +167,7 @@ function dampPose(target, dt, rate) {
 }
 
 /* ---------------- Scroll ---------------- */
-const SC = { a: 0, b: 0, f: 0, active: 0, focus: 0, progress: 0 };
+const SC = { a: 0, b: 0, f: 0, pa: 0, pb: 0, active: 0, focus: 0, progress: 0 };
 function readScroll() {
   const vh = innerHeight, mid = scrollY + vh * 0.5;
   let a = 0;
@@ -162,6 +175,8 @@ function readScroll() {
   const b = Math.min(a + 1, sections.length - 1);
   const ca = sections[a].top + sections[a].h / 2, cb = sections[b].top + sections[b].h / 2;
   SC.a = a; SC.b = b;
+  const prog = (s) => clamp((mid - s.top) / s.h, 0, 1);
+  SC.pa = prog(sections[a]); SC.pb = prog(sections[b]);
   SC.f = b === a ? 0 : smooth(0.2, 0.8, clamp((mid - ca) / (cb - ca), 0, 1));
   SC.active = SC.f < 0.5 ? a : b;
   SC.focus = SC.f < 0.12 ? a : SC.f > 0.88 ? b : -1;
@@ -177,12 +192,13 @@ sections.forEach((s, i) => {
   d.addEventListener('click', () => goTo(s.id));
   dotsEl.appendChild(d);
   const li = document.createElement('li');
-  li.innerHTML = `<button><span class="n">${String(i).padStart(2, '0')}</span><span><span class="t">${s.title}</span><span class="d">${s.hint}</span></span></button>`;
+  li.style.setProperty('--i', i);
+  li.innerHTML = `<button><span class="n">${String(i).padStart(2, '0')}</span><span class="t">${s.title}</span><span class="d">${s.lead ? s.lead.slice(0, 42) : s.hint}</span></button>`;
   li.firstChild.addEventListener('click', () => { closeMenu(); goTo(s.id); });
   listEl.appendChild(li);
 });
 const dotBtns = $$('button', dotsEl), listBtns = $$('button', listEl);
-function goTo(id) { const s = byId[id]; if (s) window.scrollTo({ top: s.top, behavior: reduceMotion ? 'auto' : 'smooth' }); }
+function goTo(id) { const s = byId[id]; if (!s) return; scroller.scrollTo(s.i === 0 ? 0 : Math.max(0, s.top + s.h * 0.5 - innerHeight * 0.5)); }
 $$('[data-goto]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); goTo(b.dataset.goto); }));
 const menuBtn = $('#menu-btn');
 function openMenu() { document.body.classList.add('menu-open'); menuBtn.setAttribute('aria-expanded', 'true'); $('#drawer').setAttribute('aria-hidden', 'false'); }
@@ -235,7 +251,9 @@ function setHud(i) {
   hud.classList.add('swap');
   setTimeout(() => {
     $('#hud-num').textContent = String(i).padStart(2, '0');
-    $('#hud-title').textContent = s.title;
+    $('#hud-kick').textContent = s.id === 'juego' ? 'El reto' : s.id === 'final' ? 'Fin de la clase' : `Paso ${String(i).padStart(2, '0')}`;
+    splitInto($('#hud-title'), s.title);
+    $('#hud-lead').textContent = s.lead;
     $('#hud-hint').textContent = s.hint;
     hudDock.replaceChildren();
     if (s.dock) hudDock.appendChild(s.dock);
@@ -243,6 +261,8 @@ function setHud(i) {
     hud.classList.remove('swap');
   }, 180);
   $('#menu-count').textContent = `${String(i).padStart(2, '0')}/${String(sections.length - 1).padStart(2, '0')}`;
+  $('#top-num').textContent = String(i).padStart(2, '0'); $('#top-title').textContent = s.title;
+  bgfx.setWord(s.big);
   dotBtns.forEach((d, k) => d.classList.toggle('on', k === i));
   listBtns.forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('done', k < i); });
 }
@@ -315,7 +335,7 @@ const _p = new THREE.Vector3();
 function updateHotspots(vw, vh) {
   const focusId = game.on ? null : SC.focus >= 0 ? sections[SC.focus].id : null;
   for (const H of HOTS) {
-    const show = H.sec === focusId;
+    const show = H.sec === focusId && cur.layers < 0.25 && cur.bexp < 0.25;
     if (show !== H.on) { H.on = show; H.el.classList.toggle('on', show); }
     H.el.classList.toggle('active', S.focus === H.id && H.sec === focusId);
     H.el.classList.toggle('visited', visited.has(H.sec + ':' + H.id));
@@ -332,6 +352,46 @@ function onFocusAction(secId, id) {
   if (secId === 'cantos' && (id === 'talones' || id === 'puntas')) setEdge(id === 'talones' ? 'back' : 'front');
   if (secId === 'pedales' && (id === 'pieizq' || id === 'pieder')) S.demo = { side: id === 'pieizq' ? 'L' : 'R', until: clock + 2.8 };
   if (secId === 'trucos') S.trickClock = 0;
+}
+
+
+/* ---------------- Etiquetas técnicas (vistas despiezadas) ---------------- */
+const LA = W.layers.userData.anchors;
+const frameAnchor = new THREE.Object3D();
+const SPECS = [
+  { sec: 'tabla', a: () => LA.top, n: '01', t: 'Top sheet', s: 'El oso · nylon impreso', v: () => cur.layers },
+  { sec: 'tabla', a: () => LA.glass1, n: '02', t: 'Fibra de vidrio', s: 'Triaxial · da rigidez', v: () => cur.layers },
+  { sec: 'tabla', a: () => LA.core, n: '03', t: 'Núcleo de madera', s: 'Álamo y haya · el alma', v: () => cur.layers },
+  { sec: 'tabla', a: () => LA.glass2, n: '04', t: 'Fibra de vidrio', s: 'Biaxial · el flex', v: () => cur.layers },
+  { sec: 'tabla', a: () => LA.base, n: '05', t: 'Base sinterizada', s: 'DRAKE · se encera', v: () => cur.layers },
+  { sec: 'tabla', a: () => LA.edge, n: '06', t: 'Cantos de acero', s: 'Agarran la nieve', v: () => cur.layers },
+  { sec: 'fijaciones', a: () => parts(bF()).aHighback, n: '01', t: 'Highback', s: 'Respaldo · forward lean', v: () => cur.bexp },
+  { sec: 'fijaciones', a: () => parts(bF()).aAnkle, n: '02', t: 'Strap de tobillo', s: 'Acolchado · carraca', v: () => cur.bexp },
+  { sec: 'fijaciones', a: () => parts(bF()).aToe, n: '03', t: 'Strap de puntera', s: 'Sujeta la punta', v: () => cur.bexp },
+  { sec: 'fijaciones', a: () => frameAnchor, n: '04', t: 'Base y heelcup', s: 'Donde apoya la bota', v: () => cur.bexp },
+  { sec: 'fijaciones', a: () => parts(bF()).aDisc, n: '05', t: 'Disco', s: '4 tornillos · el ángulo', v: () => cur.bexp },
+];
+const specRoot = $('#specs');
+for (const sp of SPECS) {
+  const el = document.createElement('div');
+  el.className = 'spec';
+  el.innerHTML = `<i></i><span class="ln"></span><span class="tx"><em>${sp.n}</em><b>${sp.t}</b><small>${sp.s}</small></span>`;
+  specRoot.appendChild(el); sp.el = el; sp.on = false;
+}
+function updateSpecs(vw, vh, focusSec) {
+  if (!frameAnchor.parent) { parts(bF()).frame.add(frameAnchor); frameAnchor.position.set(0.06, 0.03, 0.1); }
+  else if (frameAnchor.parent !== parts(bF()).frame) parts(bF()).frame.add(frameAnchor);
+  const sheet = document.body.classList.contains('sheet-open');
+  for (const sp of SPECS) {
+    const show = !game.on && !sheet && sp.sec === focusSec && sp.v() > 0.55;
+    if (show !== sp.on) { sp.on = show; sp.el.classList.toggle('on', show); }
+    if (!show) continue;
+    sp.a().getWorldPosition(_p).project(camera);
+    const x = (_p.x * 0.5 + 0.5) * vw, y = (-_p.y * 0.5 + 0.5) * vh;
+    const len = mobile ? 26 : 70;
+    sp.el.style.setProperty('--len', len + 'px');
+    sp.el.style.transform = `translate(${x}px, ${y}px)`;
+  }
 }
 
 /* ---------------- Controles ---------------- */
@@ -586,7 +646,7 @@ canvas.addEventListener('pointerdown', (e) => {
   Object.assign(spin, { on: true, id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 });
   spin.vy *= 0.3; spin.vp *= 0.3;
   canvas.setPointerCapture?.(e.pointerId);
-  document.body.classList.add('dragging');
+  document.body.classList.add('dragging'); cursorFx.setDrag(true);
 });
 canvas.addEventListener('pointermove', (e) => {
   if (!spin.on || e.pointerId !== spin.id) return;
@@ -600,7 +660,7 @@ canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'mouse') { spin.pitch = clamp(spin.pitch + dy * 0.008, -1.1, 1.1); spin.vp = lerp(spin.vp, (dy * 0.008) / dts, 0.5); }
   spin.idle = 0;
 });
-const endSpin = (e) => { if (e.pointerId !== spin.id) return; spin.on = false; document.body.classList.remove('dragging'); if (spin.moved > 8) html.classList.add('spun'); };
+const endSpin = (e) => { if (e.pointerId !== spin.id) return; spin.on = false; document.body.classList.remove('dragging'); cursorFx.setDrag(false); if (spin.moved > 8) html.classList.add('spun'); };
 canvas.addEventListener('pointerup', endSpin);
 canvas.addEventListener('pointercancel', endSpin);
 function stepSpin(dt) {
@@ -628,6 +688,7 @@ new ResizeObserver(measure).observe($('main'));
 resize();
 
 function frame(now) {
+  scroller.raf(now);
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now; clock += dt;
   const t = clock;
@@ -650,7 +711,7 @@ function frame(now) {
 
   if (!game.on) {
     const A = sections[SC.a], B = sections[SC.b];
-    const target = mixPose(POSES[A.id](t), POSES[B.id](t), SC.f);
+    const target = mixPose(POSES[A.id](t, SC.pa), POSES[B.id](t, SC.pb), SC.f);
     dampPose(target, dt, 4.5);
     mode = SIM_MODE[modeId] || 'still';
     stepSim(dt, mode, t);
@@ -675,13 +736,23 @@ function frame(now) {
   S.lift = damp(S.lift, inFij && S.focus === 'disco' ? 1 : 0, 5, dt);
   S.straps = damp(S.straps, inFij && S.focus === 'straps' ? 1 : 0, 5, dt);
   S.hbFold = inFij && S.focus === 'highback' ? Math.sin((t - S.focusT) * 2.2) * 0.5 + 0.5 : damp(S.hbFold, 0, 5, dt);
+  const lx = cur.layers, bx = cur.bexp;
+  W.layers.userData.set(lx);
+  W.board.visible = lx < 0.03;
+  W.heelEdge.visible = W.toeEdge.visible = lx < 0.03;
+  if (lx < 0.03) W.layers.visible = false;
   for (const b of [W.bindL, W.bindR]) {
-    const p = parts(b), k = b === bF() ? 1 : 0;
-    b.position.y = BOARD.T / 2 + 0.002 + S.lift * 0.16 * k;
-    p.disc.position.y = 0.004 - S.lift * 0.12 * k;
-    p.highback.rotation.x = -0.22 - S.hbFold * 0.45 * k;
+    const p = parts(b), k = b === bF() ? 1 : 0.35;
+    b.position.y = BOARD.T / 2 + 0.002 + S.lift * 0.16 * k + lx * 0.6 + bx * 0.03 * k;
+    p.disc.position.y = 0.004 - S.lift * 0.12 * k - bx * 0.05 * k;
+    for (const sc of p.screws) sc.position.y = 0.006 + bx * 0.09 * k;
+    p.frame.position.y = bx * 0.065 * k;
+    p.highback.position.set(0, 0.06 + bx * 0.19 * k, -0.06 - bx * 0.1 * k);
+    p.highback.rotation.x = -0.22 - S.hbFold * 0.45 * k - bx * 0.25 * k;
+    p.ankle.position.set(0, 0.075 + bx * 0.25 * k, -0.045 + bx * 0.02 * k);
+    p.toe.position.set(0, 0.035 + bx * 0.16 * k, 0.088 + bx * 0.13 * k);
     p.ankle.rotation.x = -S.straps * 1.6 * k;
-    p.toe.rotation.x = S.straps * 1.2 * k;
+    p.toe.rotation.x = S.straps * 1.2 * k + bx * 0.2 * k;
     p.boot.visible = cur.boots > 0.02;
     p.boot.scale.setScalar(Math.max(0.001, cur.boots));
   }
@@ -757,18 +828,19 @@ function frame(now) {
 
   // Cielo y luces
   const day = game.on ? 1 : sl;
-  W.skyMat.uniforms.top.value.copy(studio.top).lerp(slopeTop, day);
-  W.skyMat.uniforms.bottom.value.copy(studio.bot).lerp(slopeBot, day);
-  W.skyMat.uniforms.glowAmt.value = 1 - day;
-  W.catcher.material.opacity = 0.32 * (1 - sl);
-  W.skyMat.uniforms.sun.value = day;
-  W.scene.fog.color.copy(W.skyMat.uniforms.bottom.value);
-  W.scene.fog.near = game.on ? 60 : lerp(30, 9, sl);
-  W.scene.fog.far = game.on ? 650 : lerp(90, 42, sl);
+  W.bgSphere.material.opacity = day;
+  W.bgSphere.visible = day > 0.01;
+  W.scene.environment = day > 0.5 ? W.envMountain : W.envStudio;
+  document.body.classList.toggle('day', day > 0.6);
+  W.catcher.material.opacity = 0.38 * (1 - sl);
+  W.scene.fog.color.set('#dde5ee');
+  W.scene.fog.near = game.on ? 70 : 300;
+  W.scene.fog.far = game.on ? 700 : 600;
+  if (!game.on) { W.key.position.set(lerp(2.2, -3.2, day), lerp(4.5, 4.6, day), lerp(1.6, 5.5, day)); W.key.target.position.set(0, 0, 0); }
   W.hemi.intensity = lerp(0.6, 1.25, day);
   W.warm.intensity = lerp(1.6, 0, day);
   W.rim.intensity = lerp(1.4, 0.3, day);
-  renderer.toneMappingExposure = lerp(1.05, 0.92, day);
+  renderer.toneMappingExposure = lerp(1.0, 0.95, day);
 
   // Cámara
   if (!game.on) {
@@ -784,12 +856,12 @@ function frame(now) {
     const sheet = document.body.classList.contains('sheet-open');
     const hero = secId === 'inicio';
     let ox = 0, oy = 0;
-    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.22 : 0.13);
-    else ox = vw * (sheet ? 0.16 : hero ? -0.2 : -0.05);
+    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.05 : 0.17);
+    else { ox = vw * (sheet ? 0.16 : hero ? -0.12 : -0.1); oy = hero ? 0 : -vh * 0.03; }
     offX = damp(offX, ox, 5, dt); offY = damp(offY, oy, 5, dt);
     camera.setViewOffset(vw, vh, offX, offY, vw, vh);
   } else camera.clearViewOffset();
-  W.sky.position.copy(camera.position);
+  W.bgSphere.position.copy(camera.position);
 
   // Copos
   const fp = W.flakes.geometry.attributes.position, fa = fp.array, fs = W.flakes.userData.speed;
@@ -813,10 +885,12 @@ function frame(now) {
 
   renderer.render(W.scene, camera);
   updateHotspots(vw, vh);
+  updateSpecs(vw, vh, focusSec);
+  bgfx.update(SC.progress, SC.active === SC.a ? SC.pa : SC.pb);
   requestAnimationFrame(frame);
 }
 
-requestAnimationFrame((now) => { lastT = now; frame(now); setTimeout(() => $('#loader').classList.add('done'), 250); });
+requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('done'); html.classList.add('ready'); }, 450); });
 
 /* ---------------- Instalar ---------------- */
 let deferredPrompt = null;

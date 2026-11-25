@@ -1,5 +1,6 @@
 // Objetos 3D: tus tablas (texturas sacadas de tus fotos), fijaciones, botas, rider y pista de prácticas.
 import * as THREE from 'three';
+import { RGBELoader } from '../vendor/jsm/loaders/RGBELoader.js';
 
 export const BOARD = {
   half: 0.8,        // 1,6 m
@@ -34,7 +35,8 @@ export const COLORS = { red: 0xe5233d, blue: 0x3b6cff, orange: 0xff6a1a };
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export function halfWidth(x) {
+export function halfWidth(x) { return hwFn(x); }
+function hwFn(x) {
   const ax = Math.abs(x);
   const { contact, half, wWaist, wTip } = BOARD;
   if (ax <= contact) return wWaist + (wTip - wWaist) * Math.pow(ax / contact, 2);
@@ -133,9 +135,9 @@ async function loadTex(url, renderer) {
 }
 
 /* ================= Tabla ================= */
-function boardGeometry() {
-  const N = 200, M = 16;
-  const { half, T, wTip, chamfer: ch } = BOARD;
+function boardGeometry(T = BOARD.T, ch = BOARD.chamfer, inset = 0, N = 200, M = 16) {
+  const { half, wTip } = BOARD;
+  const halfWidth = (x) => Math.max(0, hwFn(x) - inset);
   const pos = [], uv = [], idx = [], groups = [];
   const v = (x, y, z, a, b) => { pos.push(x, y, z); uv.push(a, b); };
   const xs = [];
@@ -185,6 +187,79 @@ function edgeLine(side, color) {
   for (let i = 0; i <= 80; i++) { const x = -0.74 + 1.48 * i / 80; pts.push(new THREE.Vector3(x, lift(x) - BOARD.T * 0.2, side * (halfWidth(x) + 0.004))); }
   return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.008, 6, false),
     new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+}
+
+
+/* ================= Capas de la tabla (vista despiezada) ================= */
+function woodTex(renderer) {
+  return canvasTex(1024, 128, (g, w, h) => {
+    const r = rnd(12);
+    g.fillStyle = '#d9b98a'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 1) {
+      const n = Math.sin(y * 0.35) * 0.5 + Math.sin(y * 0.11 + 2) * 0.5;
+      g.fillStyle = `rgba(${150 + n * 30},${110 + n * 20},${60 + n * 10},${0.25 + r() * 0.2})`; g.fillRect(0, y, w, 1);
+    }
+    // listones
+    for (let i = 0; i < 9; i++) { g.fillStyle = i % 2 ? 'rgba(120,80,40,.18)' : 'rgba(255,240,210,.12)'; g.fillRect(0, (i / 9) * h, w, h / 9); }
+    for (let i = 0; i < 260; i++) { g.strokeStyle = `rgba(110,70,35,${r() * 0.25})`; g.lineWidth = 1; g.beginPath(); const y = r() * h; g.moveTo(0, y); g.bezierCurveTo(w * 0.3, y + r() * 6 - 3, w * 0.6, y + r() * 6 - 3, w, y + r() * 4 - 2); g.stroke(); }
+  }, renderer);
+}
+function weaveTex(renderer) {
+  const t = canvasTex(256, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 1.2;
+    for (let i = -w; i < w * 2; i += 10) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke();
+      g.beginPath(); g.moveTo(i, h); g.lineTo(i + h, 0); g.stroke();
+    }
+    g.strokeStyle = 'rgba(255,255,255,0.35)';
+    for (let x = 0; x < w; x += 14) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+  }, renderer);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 2);
+  return t;
+}
+function outline(y, offset, segs = 220) {
+  const pts = [];
+  for (let i = 0; i <= segs; i++) {
+    const a = i / segs, x = -BOARD.half + a * 2 * BOARD.half;
+    pts.push(new THREE.Vector3(x, lift(x) + y, hwFn(x) + offset));
+  }
+  for (let i = segs; i >= 0; i--) {
+    const a = i / segs, x = -BOARD.half + a * 2 * BOARD.half;
+    pts.push(new THREE.Vector3(x, lift(x) + y, -hwFn(x) - offset));
+  }
+  return new THREE.CatmullRomCurve3(pts, true);
+}
+export function buildLayers(mats, renderer) {
+  const g = new THREE.Group();
+  const plain = (c, extra = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.5, ...extra });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0xdfe7ef, map: weaveTex(renderer), roughness: 0.25, transparent: true, opacity: 0.55, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false });
+  const wood = new THREE.MeshStandardMaterial({ map: woodTex(renderer), roughness: 0.7 });
+  const inner = plain(0x1b1c20);
+  const L = [
+    { key: 'top', geo: boardGeometry(0.004, 0.0015), mats: [mats.top, plain(0xf2f2f2), mats.side], y: 0.5 },
+    { key: 'glass1', geo: boardGeometry(0.002, 0, 0.002, 160, 8), mats: [glass, glass, glass], y: 0.3 },
+    { key: 'core', geo: boardGeometry(0.012, 0, 0.008, 160, 10), mats: [wood, wood, wood], y: 0.1 },
+    { key: 'glass2', geo: boardGeometry(0.002, 0, 0.002, 160, 8), mats: [glass, glass, glass], y: -0.1 },
+    { key: 'base', geo: boardGeometry(0.004, 0), mats: [inner, mats.base, inner], y: -0.3 },
+  ];
+  for (const l of L) {
+    const m = new THREE.Mesh(l.geo, l.mats);
+    m.castShadow = true; m.userData.y = l.y;
+    g.add(m); l.mesh = m;
+  }
+  const edge = new THREE.Mesh(new THREE.TubeGeometry(outline(-0.008, 0.0015), 440, 0.004, 6, true), new THREE.MeshStandardMaterial({ color: 0xd3d8df, metalness: 1, roughness: 0.2 }));
+  edge.userData.y = -0.48; g.add(edge);
+  L.push({ key: 'edge', mesh: edge });
+  const anchors = {};
+  for (const l of L) { const a = new THREE.Object3D(); a.position.set(BOARD.half * 0.62, lift(0.5), hwFn(0.5)); l.mesh.add(a); anchors[l.key] = a; }
+  g.visible = false;
+  g.userData.layers = L; g.userData.anchors = anchors;
+  g.userData.set = (e) => {
+    g.visible = e > 0.003;
+    for (const l of L) { l.mesh.position.y = l.mesh.userData.y * e; l.mesh.rotation.x = 0; }
+  };
+  return g;
 }
 
 /* ================= Fijación ================= */
@@ -241,11 +316,11 @@ function makeBinding(M) {
     const a = i * Math.PI / 2 + Math.PI / 4;
     const screw = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.004, 12), M.detail);
     screw.position.set(Math.cos(a) * 0.035, 0.006, Math.sin(a) * 0.035);
-    disc.add(screw);
+    disc.add(screw); (parts.screws ||= []).push(screw);
   }
   g.add(disc); parts.disc = disc;
 
-  const frame = new THREE.Group(); g.add(frame);
+  const frame = new THREE.Group(); g.add(frame); parts.frame = frame;
   const s = new THREE.Shape();
   const W = 0.054, L = 0.13, r = 0.04;
   s.moveTo(-W + r, -L); s.lineTo(W - r, -L); s.quadraticCurveTo(W, -L, W, -L + r);
@@ -496,7 +571,24 @@ export async function buildWorld(renderer) {
   const fill = new THREE.DirectionalLight(0xc8d6ff, 0.55); fill.position.set(3, 1, 3);
   scene.add(hemi, key, rim, warm, fill);
 
-  const [dTop, dBase, sTop, sBase] = await Promise.all(['drake-top', 'drake-base', 'snake-top', 'snake-base'].map((n) => loadTex(`assets/${n}.jpg`, renderer)));
+  const [dTop, dBase, sTop, sBase, bgTex, snowD, snowNm, snowR] = await Promise.all([
+    ...['drake-top', 'drake-base', 'snake-top', 'snake-base'].map((n) => loadTex(`assets/${n}.jpg`, renderer)),
+    loadTex('assets/env/mountain-bg.jpg', renderer),
+    loadTex('assets/snow/snow_diff.jpg', renderer), loadTex('assets/snow/snow_nor_gl.jpg', renderer), loadTex('assets/snow/snow_rough.jpg', renderer),
+  ]);
+  snowNm.colorSpace = THREE.NoColorSpace; snowR.colorSpace = THREE.NoColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rgbe = new RGBELoader();
+  const [hdrStudio, hdrMountain] = await Promise.all([rgbe.loadAsync('assets/env/studio.hdr'), rgbe.loadAsync('assets/env/mountain.hdr')]);
+  const envStudio = pmrem.fromEquirectangular(hdrStudio).texture;
+  const envMountain = pmrem.fromEquirectangular(hdrMountain).texture;
+  hdrStudio.dispose(); hdrMountain.dispose();
+  // Fondo real (montaña nevada) en una esfera que aparece en las escenas de pista
+  bgTex.wrapS = THREE.RepeatWrapping; bgTex.repeat.x = -1;
+  const bgSphere = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), new THREE.MeshBasicMaterial({ map: bgTex, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, fog: false, toneMapped: false }));
+  bgSphere.renderOrder = -9; bgSphere.rotation.y = 0.6;
+  scene.add(bgSphere);
+  const pbr = (t, rep) => { const c = t.clone(); c.needsUpdate = true; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(rep[0], rep[1]); return c; };
   const skins = {
     drake: { top: dTop, base: dBase, side: sideTex(THEMES.drake.side, renderer) },
     snake: { top: sTop, base: sBase, side: sideTex(THEMES.snake.side, renderer) },
@@ -567,11 +659,15 @@ export async function buildWorld(renderer) {
 
   // Pista de prácticas
   const slope = new THREE.Group(); scene.add(slope);
-  const snowMap = snowTex(renderer); snowMap.repeat.set(16, 24);
-  const snowN = snowNormal(renderer); snowN.repeat.set(16, 24);
-  const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: snowMap, normalMap: snowN, normalScale: new THREE.Vector2(0.6, 0.6), roughness: 0.88, transparent: true, opacity: 0 });
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 60), groundMat);
-  ground.rotation.x = -Math.PI / 2; ground.position.z = 18; ground.receiveShadow = true;
+  const snowMap = pbr(snowD, [24, 24]), snowN = pbr(snowNm, [24, 24]), snowRough = pbr(snowR, [24, 24]);
+  const fade = radialTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)'); fade.colorSpace = THREE.NoColorSpace;
+  const fadeCv = document.createElement('canvas'); fadeCv.width = fadeCv.height = 256;
+  { const g = fadeCv.getContext('2d'); const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128); gr.addColorStop(0, '#fff'); gr.addColorStop(0.55, '#fff'); gr.addColorStop(1, '#000'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256); }
+  const fadeTex = new THREE.CanvasTexture(fadeCv);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: snowMap, normalMap: snowN, normalScale: new THREE.Vector2(0.9, 0.9), roughnessMap: snowRough, roughness: 1, alphaMap: fadeTex, transparent: true, opacity: 0, depthWrite: false });
+  // suelo que se funde con la nieve del cielo real
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(45, 96), groundMat);
+  ground.rotation.x = -Math.PI / 2; ground.position.z = 10; ground.receiveShadow = true;
   slope.add(ground);
   const treeMat = new THREE.MeshStandardMaterial({ color: 0x1f3b36, roughness: 0.9, transparent: true, opacity: 0, flatShading: true });
   const capMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.8, transparent: true, opacity: 0, flatShading: true });
@@ -585,7 +681,7 @@ export async function buildWorld(renderer) {
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 6), trunkMat); trunk.position.y = 0.15; t.add(trunk);
     const s = i % 2 ? 1 : -1;
     t.position.set(s * (3.2 + tr() * 9), 0, -6 + tr() * 46); t.scale.setScalar(0.8 + tr() * 0.7);
-    slope.add(t); trees.push(t);
+    t.visible = false; trees.push(t);
   }
   const TRAIL = 220;
   const trailGeo = new THREE.BufferGeometry();
@@ -626,7 +722,7 @@ export async function buildWorld(renderer) {
   }
 
   return {
-    scene, sky, skyMat, hemi, key, rim, warm, fill, rig, boardGroup, board, bindL, bindR, glowL, glowR,
+    scene, sky, skyMat, bgSphere, envStudio, envMountain, snowTextures: { snowD, snowNm, snowR }, layers: buildLayers(mats, renderer), hemi, key, rim, warm, fill, rig, boardGroup, board, bindL, bindR, glowL, glowR,
     heelEdge, toeEdge, anchors, rider, arrow, slope, ground, groundMat, snowMap, snowN, trees, catcher,
     treeMats: [treeMat, capMat, trunkMat], trail, trailMat, TRAIL, shadow, flakes, mats, ring, setSkin,
   };
