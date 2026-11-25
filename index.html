@@ -84,6 +84,7 @@
         <p class="kicker">Clase de snowboard · desde cero</p>
         <h1>Aprende snow<br>como si estuviera<br><em>a tu lado.</em></h1>
         <p class="lead">Desliza hacia abajo. Toca los <span class="inline-dot"></span> puntos y la tabla te lo enseña.</p>
+        <p class="drag-hint"><span class="hand">👆</span> Arrastra la tabla para girarla</p>
         <div class="row">
           <button class="btn primary" data-goto="tabla">Empezar la clase</button>
           <button class="btn ghost" data-open-menu>Ver los pasos</button>
@@ -100,7 +101,7 @@
     </section>
 
     <!-- 01 -->
-    <section class="step" id="tabla" data-title="Tu tabla" data-hint="Toca los puntos de la tabla">
+    <section class="step" id="tabla" data-title="Tu tabla" data-hint="Arrástrala para girarla · toca los puntos">
       <div class="dock">
         <div class="seg board-pick" role="group" aria-label="Elegir tabla">
           <button data-skin="drake" class="on"><i class="sw drake"></i>La blanca · Oso</button>
@@ -116,7 +117,7 @@
         <div class="info" data-info="nose" hidden><h3>Nose</h3><p>La <b>punta delantera</b>. Es la que va hacia donde bajas. En una tabla twin como esta, nose y tail son casi iguales: puedes ir en los dos sentidos.</p></div>
         <div class="info" data-info="tail" hidden><h3>Tail</h3><p>La <b>cola</b>, la punta de atrás. Cuando hagas un ollie, es tu muelle.</p></div>
         <div class="info" data-info="cantos" hidden><h3>Cantos de acero</h3><p>El borde de metal que recorre toda la tabla. Con él <b>agarras la nieve, frenas y giras</b>. Hay dos: el de <b>talones</b> (back) y el de <b>puntas</b> (front).</p><p class="hint">Cuidado al cogerla: cortan.</p></div>
-        <div class="info" data-info="base" hidden><h3>La base</h3><p>Le hemos dado la vuelta: esta es la suela que <b>desliza</b>, con el DRAKE en rojo y negro. Hay que <b>encerarla</b> de vez en cuando para que corra.</p></div>
+        <div class="info" data-info="base" hidden><h3>La base</h3><p>Le hemos dado la vuelta: esta es la suela que <b>desliza</b>, con el DRAKE gigante. Hay que <b>encerarla</b> de vez en cuando para que corra.</p></div>
         <div class="info" data-info="rocker" hidden><h3>Rocker</h3><p>Mírala de lado: las puntas <b>se levantan</b>. Así no se clava en la nieve y es más fácil girar. Perfecta para aprender.</p></div>
       </div>
     </section>
@@ -272,8 +273,34 @@
       </div>
     </section>
 
+
     <!-- 10 -->
-    <section class="step" id="juego" data-title="La bajada" data-hint="Una pista roja estilo Formigal">
+    <section class="step" id="consejos" data-title="Consejos del profe" data-hint="Toca cada consejo">
+      <div class="infos" id="tips-infos">
+        <div class="info" data-info="main" hidden><h3>Consejos del profe</h3><p>Lo que me enseñaron a mí cuando empecé. Toca cada punto alrededor de la tabla.</p></div>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section class="step" id="final" data-title="¡A la pista!" data-hint="Llévatela en el móvil">
+      <div class="dock">
+        <div class="install" id="install">
+          <div class="ios-only"><b>iPhone:</b> toca <span class="ico">⬆︎</span> Compartir → <b>Añadir a pantalla de inicio</b></div>
+          <div class="android-only"><b>Android:</b> menú <span class="ico">⋮</span> → <b>Instalar aplicación</b></div>
+          <button class="btn primary" id="install-btn" hidden>Instalar la app</button>
+        </div>
+        <div class="row">
+          <button class="btn ghost" data-goto="inicio">Volver a empezar</button>
+          <button class="btn primary" data-goto="juego">¿Quieres probar? ↓</button>
+        </div>
+      </div>
+      <div class="infos">
+        <div class="info" data-info="main" hidden><h3>¿Listo para la pista?</h3><p>Guárdala en el móvil para tenerla siempre a mano, incluso sin cobertura en la estación.</p></div>
+      </div>
+    </section>
+
+    <!-- 12 -->
+    <section class="step" id="juego" data-title="¿Quieres probar?" data-hint="Baja la montaña con tu tabla">
       <div class="dock">
         <div class="game-pick">
           <div class="seg" role="group" aria-label="Modo">
@@ -290,40 +317,20 @@
       </div>
       <div class="infos">
         <div class="info" data-info="main" hidden>
-          <h3>La bajada</h3>
+          <h3>¿Quieres probar?</h3>
           <p>Una pista roja de 900 m entre pinos, con telesilla y los picos del Pirineo al fondo. Bajas con tu tabla <b>solo con los pedales</b>:</p>
           <ul class="pedal-rules">
             <li><i class="k l">IZQ</i><span>Pie izquierdo → giras a la izquierda.</span></li>
             <li><i class="k r">DER</i><span>Pie derecho → giras a la derecha.</span></li>
             <li><i class="k">⟂</i><span>¿Vas muy rápido? Pon la tabla <b>cruzada</b> y frenas.</span></li>
           </ul>
-          <p class="hint">En slalom, cada puerta que te saltes son +2 segundos.</p>
+          <ul class="pedal-rules">
+            <li><i class="k">⤒</i><span>Mantén <b>SALTAR</b> para cargar y suelta: ¡ollie! En los kickers del snowpark vuelas.</span></li>
+            <li><i class="k">↻</i><span>En el aire, los pedales te hacen <b>girar</b> (180, 360…). Mantén SALTAR para hacer un <b>grab</b>.</span></li>
+            <li><i class="k">▭</i><span>Cae encima de un <b>cajón</b> y deslizas. Si aterrizas torcido… al suelo.</span></li>
+          </ul>
+          <p class="hint">En el ordenador: ← → y la barra espaciadora. En slalom, cada puerta que te saltes son +2 s.</p>
         </div>
-      </div>
-    </section>
-
-    <!-- 11 -->
-    <section class="step" id="consejos" data-title="Consejos del profe" data-hint="Toca cada consejo">
-      <div class="infos" id="tips-infos">
-        <div class="info" data-info="main" hidden><h3>Consejos del profe</h3><p>Lo que me enseñaron a mí cuando empecé. Toca cada punto alrededor de la tabla.</p></div>
-      </div>
-    </section>
-
-    <!-- 12 -->
-    <section class="step" id="final" data-title="¡A la pista!" data-hint="Llévatela en el móvil">
-      <div class="dock">
-        <div class="install" id="install">
-          <div class="ios-only"><b>iPhone:</b> toca <span class="ico">⬆︎</span> Compartir → <b>Añadir a pantalla de inicio</b></div>
-          <div class="android-only"><b>Android:</b> menú <span class="ico">⋮</span> → <b>Instalar aplicación</b></div>
-          <button class="btn primary" id="install-btn" hidden>Instalar la app</button>
-        </div>
-        <div class="row">
-          <button class="btn ghost" data-goto="inicio">Volver a empezar</button>
-          <button class="btn ghost" data-goto="juego">Bajar otra vez</button>
-        </div>
-      </div>
-      <div class="infos">
-        <div class="info" data-info="main" hidden><h3>¿Listo para la pista?</h3><p>Guárdala en el móvil para tenerla siempre a mano, incluso sin cobertura en la estación.</p></div>
       </div>
     </section>
   </main>
@@ -332,6 +339,7 @@
   <div id="game" hidden>
     <div class="game-top">
       <div class="g-box"><b id="g-speed">0</b><span>km/h</span></div>
+      <div class="g-box g-score"><b id="g-score">0</b><span>puntos</span></div>
       <div class="g-mid">
         <div class="g-track"><i id="g-prog"></i><span class="g-flag">🏁</span></div>
         <div class="g-sub"><span id="g-time">0:00.0</span><span id="g-gates"></span></div>
@@ -339,8 +347,10 @@
       <button class="icon-btn" id="game-exit" aria-label="Salir">✕</button>
     </div>
     <div class="game-msg" id="game-msg"></div>
-    <div class="pedals game-pedals" data-pedals>
+    <div class="game-trick" id="g-trick"><b></b><span></span></div>
+    <div class="game-controls">
       <button class="pedal" data-pedal="L"><span>◀ Pie izq.</span><i class="meter"><b></b></i></button>
+      <button class="jump" id="jump-btn" data-jump><i class="charge"></i><span>⤒</span><small>Saltar</small></button>
       <button class="pedal" data-pedal="R"><span>Pie der. ▶</span><i class="meter"><b></b></i></button>
     </div>
     <div class="game-over" id="game-over" hidden>
@@ -350,6 +360,7 @@
         <div><b id="go-time">0:00</b><span>tiempo</span></div>
         <div><b id="go-top">0</b><span>km/h máx.</span></div>
         <div id="go-gates-box"><b id="go-gates">0</b><span>puertas</span></div>
+        <div><b id="go-score">0</b><span>puntos</span></div>
       </div>
       <p class="hint" id="go-best"></p>
       <div class="row">

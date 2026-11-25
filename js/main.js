@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
-import { buildWorld, poseRider, BOARD } from './world.js';
+import { buildWorld, poseRider, BOARD, THEMES } from './world.js';
 import { TRICKS, TIPS } from './content.js';
 import { createGame, RUN } from './game.js';
 
@@ -53,6 +53,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 3000);
 
 try {
@@ -62,10 +64,12 @@ try {
   ]);
 } catch { /* fuente de reserva */ }
 
-const W = buildWorld(renderer);
+const W = await buildWorld(renderer);
 W.scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 W.setSkin(S.skin);
 const P = W.rider.userData.P;
+const studio = { top: new THREE.Color('#07080b'), bot: new THREE.Color('#25272f') };
+const spin = { on: false, id: null, x: 0, y: 0, t: 0, moved: 0, yaw: 0, pitch: 0, vy: 0, vp: 0, idle: 0 };
 const bF = () => (S.dir > 0 ? W.bindL : W.bindR);
 const bB = () => (S.dir > 0 ? W.bindR : W.bindL);
 const parts = (b) => b.userData.parts;
@@ -104,7 +108,7 @@ const POSES = {
     if (f === 'cantos') { cam = [0.4, 0.22, 1.25]; look = [0.05, 0.0, 0.1]; ry = 0.1; }
     if (f === 'rocker') { cam = [0, 0.1, 2.6]; look = [0, 0.04, 0]; ry = 0; }
     if (f === 'base') { rx = Math.PI; }
-    return pose({ cam, look, rot: [rx, ry, 0], pos: [0, Math.sin(t) * 0.02, 0], edges: f === 'cantos' ? 1 : 0.35, mk: 0.85 });
+    return pose({ cam, look, rot: [rx, ry, 0], pos: [0, Math.sin(t) * 0.02, 0], edges: f === 'cantos' ? 1 : 0.35, mk: 0.6 });
   },
   fijaciones: () => {
     const f = F(), x = S.dir * BOARD.stance;
@@ -218,7 +222,7 @@ function closeSheet(keepFocus) {
 $('.sheet-close').addEventListener('click', () => closeSheet());
 $('#hud-info').addEventListener('click', () => openInfo(sections[hudSection].id, 'main'));
 $('#hud-next').addEventListener('click', () => { const n = sections[Math.min(hudSection + 1, sections.length - 1)]; goTo(n.id); });
-canvas.addEventListener('click', () => { if (document.body.classList.contains('sheet-open')) closeSheet(); });
+canvas.addEventListener('click', () => { if (spin.moved < 8 && document.body.classList.contains('sheet-open')) closeSheet(); });
 addEventListener('keydown', (e) => { if (e.code === 'Escape') { if (game.on) quitGame(); else { closeSheet(); closeMenu(); } } });
 
 function setHud(i) {
@@ -358,7 +362,16 @@ function setStance(st) { S.stance = st; store.set('stance', st); $$('[data-stanc
 segGroup('[data-stance]', 'stance', setStance);
 setStance(S.stance);
 
-function setSkin(sk) { S.skin = sk; store.set('skin', sk); W.setSkin(sk); $$('[data-skin]').forEach((b) => b.classList.toggle('on', b.dataset.skin === sk)); }
+function setSkin(sk) {
+  const changed = S.skin !== sk;
+  S.skin = sk; store.set('skin', sk); W.setSkin(sk);
+  const th = THEMES[sk] || THEMES.drake;
+  html.dataset.board = sk;
+  studio.top.set(th.studio[0]); studio.bot.set(th.studio[1]);
+  $('meta[name="theme-color"]').setAttribute('content', th.css.bg);
+  $$('[data-skin]').forEach((b) => b.classList.toggle('on', b.dataset.skin === sk));
+  if (changed) { spin.vy += 11; spin.idle = 0; } // la tabla da una vuelta al cambiar
+}
 $$('[data-skin]').forEach((b) => b.addEventListener('click', () => setSkin(b.dataset.skin)));
 setSkin(S.skin);
 
@@ -406,6 +419,15 @@ addEventListener('keydown', (e) => { if (keyMap[e.code]) { input[keyMap[e.code]]
 addEventListener('keyup', (e) => { if (keyMap[e.code]) input[keyMap[e.code]] = false; });
 addEventListener('blur', () => { input.kL = input.kR = false; input.L.clear(); input.R.clear(); $$('.pedal.down').forEach((b) => b.classList.remove('down')); });
 const demoOn = (side) => S.demo && S.demo.side === side && clock < S.demo.until && Math.sin((S.demo.until - clock) * 3) > -0.6;
+const jumpKeys = { Space: 1, ArrowUp: 1, KeyW: 1 };
+addEventListener('keydown', (e) => { if (jumpKeys[e.code] && game.on) { input.kJ = true; e.preventDefault(); } });
+addEventListener('keyup', (e) => { if (jumpKeys[e.code]) input.kJ = false; });
+input.J = new Set();
+const jb = $('#jump-btn');
+jb.addEventListener('pointerdown', (e) => { e.preventDefault(); jb.setPointerCapture?.(e.pointerId); input.J.add(e.pointerId); jb.classList.add('down'); });
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) jb.addEventListener(ev, (e) => { input.J.delete(e.pointerId); if (!input.J.size) jb.classList.remove('down'); });
+jb.addEventListener('contextmenu', (e) => e.preventDefault());
+const inJ = () => input.kJ || input.J.size > 0;
 const inL = () => input.kL || input.L.size > 0 || demoOn('L');
 const inR = () => input.kR || input.R.size > 0 || demoOn('R');
 
@@ -415,7 +437,7 @@ const fmtTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, 
 function showBest() { const b = store.get('best-' + gameMode, 0); $('#best-score').textContent = b ? fmtTime(b) : '—'; }
 segGroup('[data-mode]', 'mode', (v) => { gameMode = v; showBest(); });
 showBest();
-let msgTimer;
+let msgTimer, trickTimer;
 const gameUI = {
   start(mode) {
     document.body.classList.add('playing');
@@ -430,7 +452,17 @@ const gameUI = {
     clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.remove('on'), 800);
     if (bad) { const f = $('#flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); navigator.vibrate?.(80); }
   },
+  trick(name, pts, combo, start) {
+    const el = $('#g-trick');
+    el.querySelector('b').textContent = name;
+    el.querySelector('span').textContent = start ? '' : `+${pts}${combo > 1 ? `  ×${combo} combo` : ''}`;
+    el.classList.remove('on'); void el.offsetWidth; el.classList.add('on');
+    clearTimeout(trickTimer); trickTimer = setTimeout(() => el.classList.remove('on'), start ? 1400 : 1600);
+  },
   hud(d) {
+    $('#g-score').textContent = d.score;
+    jb.style.setProperty('--charge', d.charge.toFixed(3));
+    jb.classList.toggle('air', d.state === 'air');
     $('#g-speed').textContent = Math.round(d.kmh);
     $('#g-time').textContent = fmtTime(d.time);
     $('#g-prog').style.transform = `scaleX(${d.progress.toFixed(3)})`;
@@ -442,12 +474,13 @@ const gameUI = {
     $('#go-top').textContent = Math.round(r.top * 3.6);
     $('#go-gates-box').hidden = r.mode !== 'slalom';
     $('#go-gates').textContent = `${r.gates}/${r.total}`;
-    $('#go-best').textContent = r.isBest ? 'Tu mejor tiempo en esta pista.' : `Tu récord: ${fmtTime(r.best)}`;
+    $('#go-score').textContent = r.score;
+    $('#go-best').textContent = (r.isBest ? 'Tu mejor tiempo en esta pista.' : `Tu récord: ${fmtTime(r.best)}`) + ` · Récord de puntos: ${r.bestPts}`;
     setTimeout(() => { $('#game-over').hidden = false; }, 900);
     showBest();
   },
 };
-const game = createGame({ W, camera, S, inL, inR, store, ui: gameUI });
+const game = createGame({ W, camera, S, inL, inR, inJ, store, ui: gameUI, renderer });
 function quitGame() { game.stop(); W.shadow.quaternion.identity(); }
 $('#play-btn').addEventListener('click', () => game.start(gameMode));
 $('#again-btn').addEventListener('click', () => game.start(gameMode));
@@ -547,6 +580,41 @@ let vw = 0, vh = 0, mobile = false, offX = 0, offY = 0, clock = 0, lastT = perfo
 const statusEl = $('#pedal-status');
 const meters = $$('.pedal .meter b').map((b) => ({ b, side: b.closest('.pedal').dataset.pedal }));
 
+/* ---------------- Arrastrar para girar la tabla ---------------- */
+canvas.addEventListener('pointerdown', (e) => {
+  if (game.on) return;
+  Object.assign(spin, { on: true, id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), moved: 0 });
+  spin.vy *= 0.3; spin.vp *= 0.3;
+  canvas.setPointerCapture?.(e.pointerId);
+  document.body.classList.add('dragging');
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!spin.on || e.pointerId !== spin.id) return;
+  const now = performance.now(), dts = Math.max(0.008, (now - spin.t) / 1000);
+  const dx = e.clientX - spin.x, dy = e.clientY - spin.y;
+  spin.x = e.clientX; spin.y = e.clientY; spin.t = now;
+  spin.moved += Math.abs(dx) + Math.abs(dy);
+  const k = 0.0105;
+  spin.yaw += dx * k;
+  spin.vy = lerp(spin.vy, (dx * k) / dts, 0.5);
+  if (e.pointerType === 'mouse') { spin.pitch = clamp(spin.pitch + dy * 0.008, -1.1, 1.1); spin.vp = lerp(spin.vp, (dy * 0.008) / dts, 0.5); }
+  spin.idle = 0;
+});
+const endSpin = (e) => { if (e.pointerId !== spin.id) return; spin.on = false; document.body.classList.remove('dragging'); if (spin.moved > 8) html.classList.add('spun'); };
+canvas.addEventListener('pointerup', endSpin);
+canvas.addEventListener('pointercancel', endSpin);
+function stepSpin(dt) {
+  if (!spin.on) {
+    spin.yaw += spin.vy * dt; spin.pitch = clamp(spin.pitch + spin.vp * dt, -1.1, 1.1);
+    spin.vy *= Math.exp(-1.4 * dt); spin.vp *= Math.exp(-3 * dt);
+    spin.idle += dt;
+    if (spin.idle > 2.6 && Math.abs(spin.vy) < 0.6) {
+      const home = Math.round(spin.yaw / (Math.PI * 2)) * Math.PI * 2;
+      spin.yaw = damp(spin.yaw, home, 1.8, dt); spin.pitch = damp(spin.pitch, 0, 1.8, dt);
+    }
+  }
+}
+
 function resize() {
   vw = innerWidth; vh = innerHeight; mobile = mobileMQ.matches;
   renderer.setSize(vw, vh, false);
@@ -596,8 +664,11 @@ function frame(now) {
     dampPose(POSES.juego(t), dt, 4.5);
     cur.rider = cur.boots = 1; cur.slope = 0; cur.sim = 0; cur.trick = 0; cur.explode = 0; cur.arrow = 0; cur.edges = 0; cur.glow = 1;
     riderOpt = game.update(dt, t);
+    spin.yaw = spin.pitch = spin.vy = spin.vp = 0;
   }
   const sim = S.sim, sw = cur.sim, tw = cur.trick;
+  stepSpin(dt);
+  const boardOnly = 1 - clamp(cur.rider, 0, 1);
 
   // Acciones de los puntos en las fijaciones y la tabla
   const inFij = focusSec === 'fijaciones';
@@ -619,7 +690,7 @@ function frame(now) {
   if (!game.on) {
     const pitchComp = Math.abs(Math.sin(tr.pitch * tw)) * 0.72;
     rig.position.set(cur.pos[0] + sim.x * sw, cur.pos[1] + (tr.y + pitchComp) * tw, cur.pos[2]);
-    rig.rotation.set(cur.rot[0] + sim.roll * sw, cur.rot[1] + sim.yaw * sw + S.trickYawS * tw, cur.rot[2] + sim.pitch * sw + tr.pitch * dSign * tw);
+    rig.rotation.set(cur.rot[0] + sim.roll * sw + spin.pitch * boardOnly, cur.rot[1] + sim.yaw * sw + S.trickYawS * tw + spin.yaw * boardOnly, cur.rot[2] + sim.pitch * sw + tr.pitch * dSign * tw);
     W.boardGroup.rotation.y = tr.shifty * tw;
   }
 
@@ -686,15 +757,17 @@ function frame(now) {
 
   // Cielo y luces
   const day = game.on ? 1 : sl;
-  W.skyMat.uniforms.top.value.copy(studioTop).lerp(slopeTop, day);
-  W.skyMat.uniforms.bottom.value.copy(studioBot).lerp(slopeBot, day);
+  W.skyMat.uniforms.top.value.copy(studio.top).lerp(slopeTop, day);
+  W.skyMat.uniforms.bottom.value.copy(studio.bot).lerp(slopeBot, day);
+  W.skyMat.uniforms.glowAmt.value = 1 - day;
+  W.catcher.material.opacity = 0.32 * (1 - sl);
   W.skyMat.uniforms.sun.value = day;
   W.scene.fog.color.copy(W.skyMat.uniforms.bottom.value);
   W.scene.fog.near = game.on ? 60 : lerp(30, 9, sl);
   W.scene.fog.far = game.on ? 650 : lerp(90, 42, sl);
   W.hemi.intensity = lerp(0.6, 1.25, day);
-  W.warm.intensity = lerp(2.2, 0, day);
-  W.rim.intensity = lerp(1.0, 0.3, day);
+  W.warm.intensity = lerp(1.6, 0, day);
+  W.rim.intensity = lerp(1.4, 0.3, day);
   renderer.toneMappingExposure = lerp(1.05, 0.92, day);
 
   // Cámara
@@ -702,7 +775,11 @@ function frame(now) {
     const aspect = vw / vh;
     const zoom = aspect < 1.25 ? 1 + (clamp(1.3 / aspect, 1, 2.9) - 1) * cur.mk : 1;
     const look = cur.look, cp = cur.cam;
-    camera.position.set(look[0] + (cp[0] - look[0]) * zoom, look[1] + (cp[1] - look[1]) * zoom, look[2] + (cp[2] - look[2]) * zoom);
+    // Con rider: arrastrar hace girar la cámara alrededor
+    const orb = spin.yaw * (1 - boardOnly), ca = Math.cos(orb), sa = Math.sin(orb);
+    let ox0 = (cp[0] - look[0]) * zoom, oz0 = (cp[2] - look[2]) * zoom;
+    const ox1 = ox0 * ca + oz0 * sa, oz1 = -ox0 * sa + oz0 * ca;
+    camera.position.set(look[0] + ox1, look[1] + (cp[1] - look[1]) * zoom, look[2] + oz1);
     camera.lookAt(look[0], look[1], look[2]);
     const sheet = document.body.classList.contains('sheet-open');
     const hero = secId === 'inicio';
