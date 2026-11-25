@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { buildWorld, poseRider, BOARD } from './world.js';
 import { TRICKS, TIPS } from './content.js';
+import { createGame, RUN } from './game.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -11,23 +12,20 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const damp = (cur, target, rate, dt) => lerp(cur, target, 1 - Math.exp(-rate * dt));
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-/* ---------------- Almacenamiento seguro ---------------- */
 const store = {
   get(k, d) { try { const v = localStorage.getItem('snowprofe:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('snowprofe:' + k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } },
 };
 
-/* ---------------- Entorno: iPhone / Android / app instalada ---------------- */
+/* ---------------- Entorno ---------------- */
 const html = document.documentElement;
 const ua = navigator.userAgent;
 const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const isAndroid = /Android/i.test(ua);
 const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
 html.classList.toggle('is-ios', isIOS);
-html.classList.toggle('is-android', isAndroid);
+html.classList.toggle('is-android', /Android/i.test(ua));
 html.classList.toggle('standalone', standalone);
 if (standalone) {
-  // En la app de pantalla de inicio: sin zoom
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 }
@@ -36,17 +34,15 @@ const mobileMQ = matchMedia('(max-width: 820px), (orientation: portrait) and (ma
 
 /* ---------------- Estado ---------------- */
 const S = {
-  stance: store.get('stance', 'regular'),
-  dir: 1,
-  angF: 15, angB: -6,
-  angFs: 15, angBs: -6,
-  edge: 'back',
-  edgeYaw: 0,
-  crouch: 0.55,
+  stance: store.get('stance', 'regular'), dir: 1,
+  skin: store.get('skin', 'drake'),
+  angF: 15, angB: -6, angFs: 15, angBs: -6,
+  edge: 'back', edgeYaw: 0, crouch: 0.55,
   trick: 'ollie', trickClock: 0, trickYawBase: 0, trickYawS: 0,
-  pL: 0, pR: 0,
+  pL: 0, pR: 0, look: 0,
+  focus: null, focusT: 0, demo: null,
+  flip: 0, straps: 0, hbFold: 0, lift: 0,
   sim: { x: 0, v: 0, yaw: 0, roll: 0, pitch: 0, phi: 0, speed: 0 },
-  look: 0,
 };
 S.dir = S.stance === 'goofy' ? -1 : 1;
 
@@ -57,131 +53,95 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 3000);
 
-const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 200);
+try {
+  await Promise.race([
+    Promise.all([document.fonts.load('900 64px Archivo'), document.fonts.load('800 64px Archivo')]),
+    new Promise((r) => setTimeout(r, 2500)),
+  ]);
+} catch { /* fuente de reserva */ }
 
-async function fontsReady() {
-  try {
-    await Promise.race([
-      Promise.all([document.fonts.load('900 64px Unbounded'), document.fonts.load('700 64px Unbounded')]),
-      new Promise((r) => setTimeout(r, 2500)),
-    ]);
-  } catch { /* fuentes no disponibles: se usa la de reserva */ }
-}
-
-await fontsReady();
 const W = buildWorld(renderer);
-const pmrem = new THREE.PMREMGenerator(renderer);
-W.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-
-const bF = () => (S.dir > 0 ? W.bindL : W.bindR); // fijación delantera
+W.scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+W.setSkin(S.skin);
 const P = W.rider.userData.P;
+const bF = () => (S.dir > 0 ? W.bindL : W.bindR);
+const bB = () => (S.dir > 0 ? W.bindR : W.bindL);
+const parts = (b) => b.userData.parts;
 
 /* ---------------- Secciones ---------------- */
-const sections = $$('.step').map((el, i) => ({ el, id: el.id, i, title: el.dataset.title, desc: el.dataset.desc, top: 0, h: 1 }));
+const sections = $$('.step').map((el, i) => ({
+  el, id: el.id, i, title: el.dataset.title, hint: el.dataset.hint, top: 0, h: 1,
+  dock: el.querySelector('.dock'), infos: el.querySelector('.infos'),
+}));
 const byId = Object.fromEntries(sections.map((s) => [s.id, s]));
-
 function measure() {
   const y = scrollY;
-  for (const s of sections) {
-    const r = s.el.getBoundingClientRect();
-    s.top = r.top + y; s.h = r.height;
-  }
+  for (const s of sections) { const r = s.el.getBoundingClientRect(); s.top = r.top + y; s.h = r.height; }
 }
 
-/* ---------------- Poses de cámara / tabla por paso ---------------- */
+/* ---------------- Poses por paso ---------------- */
 const DEF = {
   cam: [0, 0.3, 3.4], look: [0, 0, 0], pos: [0, 0, 0], rot: [0, 0, 0],
-  explode: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0,
-  crouch: 0.5, trick: 0, mk: 1, spinFlakes: 0,
+  explode: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0, crouch: 0.5, trick: 0, mk: 1,
 };
 const pose = (o) => ({ ...DEF, ...o });
 const GROUND = 0.012;
+const F = () => S.focus;
 
 const POSES = {
-  inicio: (p, t) => pose({
+  inicio: (t) => pose({
     cam: [0, 0.12, 3.5], look: [0, 0.02, 0],
     pos: [0, Math.sin(t * 1.1) * 0.05, 0],
-    rot: [0.28, 0.8 + Math.sin(t * 0.45) * 0.45, 1.02 + Math.sin(t * 0.7) * 0.05],
-    mk: 1,
+    rot: [0.28, 0.75 + Math.sin(t * 0.45) * 0.45, 1.02 + Math.sin(t * 0.7) * 0.05],
   }),
-  tabla: (p, t) => {
-    const flip = smooth(0.4, 0.66, p) * Math.PI;
-    return pose({
-      cam: [0, 1.75, 2.55], look: [0, -0.02, 0],
-      rot: [flip, -0.32 + (p - 0.5) * 0.5, 0], pos: [0, Math.sin(t) * 0.02, 0],
-      edges: 0.9, mk: 1.15,
-    });
+  tabla: (t) => {
+    const f = F(), nx = 0.55 * S.dir;
+    let cam = [0, 1.75, 2.55], look = [0, -0.02, 0], ry = -0.3 + Math.sin(t * 0.3) * 0.12, rx = 0;
+    if (f === 'nose') { cam = [nx * 1.9, 0.8, 1.35]; look = [nx, 0.03, 0]; ry = 0; }
+    if (f === 'tail') { cam = [-nx * 1.9, 0.8, 1.35]; look = [-nx, 0.03, 0]; ry = 0; }
+    if (f === 'cantos') { cam = [0.4, 0.22, 1.25]; look = [0.05, 0.0, 0.1]; ry = 0.1; }
+    if (f === 'rocker') { cam = [0, 0.1, 2.6]; look = [0, 0.04, 0]; ry = 0; }
+    if (f === 'base') { rx = Math.PI; }
+    return pose({ cam, look, rot: [rx, ry, 0], pos: [0, Math.sin(t) * 0.02, 0], edges: f === 'cantos' ? 1 : 0.35, mk: 0.85 });
   },
-  fijaciones: (p, t) => {
-    const x = S.dir * BOARD.stance;
-    return pose({
-      cam: [x + 0.62, 0.55, 0.78], look: [x * 0.9, 0.09, 0],
-      rot: [0, -0.15 + (p - 0.5) * 0.7, 0],
-      explode: smooth(0.15, 0.4, p) * (1 - smooth(0.85, 1, p)) * 0.8 + 0.1, mk: 0.55,
-    });
+  fijaciones: () => {
+    const f = F(), x = S.dir * BOARD.stance;
+    let cam = [x + 0.62, 0.55, 0.78], look = [x * 0.9, 0.09, 0];
+    if (f === 'angulos') { cam = [0, 2.3, -0.75]; look = [0, 0, 0.02]; }
+    if (f === 'highback') { cam = [x + 0.7, 0.45, -0.55]; look = [x, 0.14, -0.05]; }
+    if (f === 'disco') { cam = [x + 0.55, 0.35, 0.7]; look = [x, 0.06, 0]; }
+    return pose({ cam, look, rot: [0, f === 'angulos' ? 0 : -0.12, 0], mk: f === 'angulos' ? 1.25 : 0.6 });
   },
-  stance: () => pose({
-    cam: [0, 3.3, -1.3], look: [0.0, 0, 0.06],
-    boots: 1, arrow: 1, mk: 1.25,
-  }),
-  postura: () => pose({
-    cam: [3.3, 1.35, 2.2], look: [0, 0.72, 0],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: 0.45, mk: 1.4,
-  }),
-  pedales: () => pose({
-    cam: [S.sim.x * 0.5, 2.3, -3.7], look: [S.sim.x * 0.5, 0.55, 0.8],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3,
-  }),
-  cantos: () => pose({
-    cam: [3.4, 1.15, -1.7], look: [0, 0.6, 0],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.4,
-  }),
-  hoja: () => pose({
-    cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.35, 1.3],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9,
-  }),
-  giro: () => pose({
-    cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.2, 1.7],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7,
-  }),
-  trucos: () => pose({
-    cam: [2.9, 1.45, -2.9], look: [0, 0.85, 0],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5,
-  }),
-  juego: () => pose({
-    cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1,
-  }),
-  consejos: (p, t) => pose({
-    cam: [0, 0.25, 3.6], look: [0, 0, 0],
-    pos: [0, Math.sin(t) * 0.05, 0],
-    rot: [0.5, t * 0.5, 0.55], mk: 1,
-  }),
-  final: (p, t) => pose({
-    cam: [0, 0.1, 3.3], look: [0, 0, 0],
-    pos: [0, Math.sin(t * 1.3) * 0.06, 0],
-    rot: [0.2, t * 0.9, 1.05], mk: 1,
-  }),
-  game: () => pose({
-    cam: [S.sim.x * 0.6, 3.3, -4.7], look: [S.sim.x * 0.6, 0.05, 1.7],
-    pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.1,
-  }),
+  stance: () => pose({ cam: [0, 3.3, -1.3], look: [0, 0, 0.06], boots: 1, arrow: 1, mk: 0.85 }),
+  postura: () => {
+    const f = F();
+    let cam = [3.3, 1.35, 2.2], look = [0, 0.72, 0];
+    if (f === 'rodillas') { cam = [2.2, 0.75, 1.7]; look = [0, 0.45, 0]; }
+    if (f === 'hombros') { cam = [0.2, 2.0, -2.8]; look = [0, 1.1, 0]; }
+    if (f === 'mirada') { cam = [1.6, 1.6, 2.2]; look = [0, 1.35, 0]; }
+    if (f === 'cadera') { cam = [2.6, 1.0, 1.4]; look = [0, 0.7, 0]; }
+    return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.4 });
+  },
+  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.3, -3.7], look: [S.sim.x * 0.5, 0.55, 0.8], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
+  cantos: () => pose({ cam: [3.4, 1.15, -1.7], look: [0, 0.6, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.4 }),
+  hoja: () => pose({ cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.35, 1.3], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
+  giro: () => pose({ cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.2, 1.7], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7 }),
+  trucos: () => pose({ cam: [2.9, 1.45, -2.9], look: [0, 0.85, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5 }),
+  juego: () => pose({ cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1 }),
+  consejos: (t) => pose({ cam: [0, 0.2, 3.9], look: [0, 0, 0], pos: [0, Math.sin(t) * 0.04, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
+  final: (t) => pose({ cam: [0, 0.1, 3.3], look: [0, 0, 0], pos: [0, Math.sin(t * 1.3) * 0.06, 0], rot: [0.2, t * 0.8, 1.05] }),
 };
 const SIM_MODE = { pedales: 'drill', cantos: 'hold', hoja: 'leaf', giro: 'turn', juego: 'leaf' };
 
 function mixPose(a, b, f) {
   const o = {};
-  for (const k in a) {
-    const va = a[k], vb = b[k];
-    o[k] = Array.isArray(va) ? va.map((v, i) => lerp(v, vb[i], f)) : lerp(va, vb, f);
-  }
+  for (const k in a) o[k] = Array.isArray(a[k]) ? a[k].map((v, i) => lerp(v, b[k][i], f)) : lerp(a[k], b[k], f);
   return o;
 }
-
-// Pose actual (suavizada)
 let cur = null;
-function dampPose(target, dt, rate = 5) {
+function dampPose(target, dt, rate) {
   if (!cur) { cur = JSON.parse(JSON.stringify(target)); return; }
   for (const k in target) {
     if (Array.isArray(target[k])) for (let i = 0; i < 3; i++) cur[k][i] = damp(cur[k][i], target[k][i], rate, dt);
@@ -190,22 +150,17 @@ function dampPose(target, dt, rate = 5) {
 }
 
 /* ---------------- Scroll ---------------- */
-const SC = { a: 0, b: 0, f: 0, pa: 0, pb: 0, active: 0, focus: 0, progress: 0 };
+const SC = { a: 0, b: 0, f: 0, active: 0, focus: 0, progress: 0 };
 function readScroll() {
   const vh = innerHeight, mid = scrollY + vh * 0.5;
-  const centers = sections.map((s) => s.top + s.h / 2);
   let a = 0;
-  while (a < sections.length - 1 && mid > centers[a + 1]) a++;
+  while (a < sections.length - 1 && mid > sections[a + 1].top + sections[a + 1].h / 2) a++;
   const b = Math.min(a + 1, sections.length - 1);
-  const raw = b === a ? 0 : clamp((mid - centers[a]) / (centers[b] - centers[a]), 0, 1);
+  const ca = sections[a].top + sections[a].h / 2, cb = sections[b].top + sections[b].h / 2;
   SC.a = a; SC.b = b;
-  SC.f = smooth(0.28, 0.72, raw);
-  const prog = (s) => clamp((mid - s.top) / s.h, 0, 1);
-  SC.pa = prog(sections[a]); SC.pb = prog(sections[b]);
-  let active = 0;
-  for (let i = 0; i < sections.length; i++) if (mid >= sections[i].top) active = i;
-  SC.active = active;
-  SC.focus = SC.f < 0.2 ? a : SC.f > 0.8 ? b : -1;
+  SC.f = b === a ? 0 : smooth(0.2, 0.8, clamp((mid - ca) / (cb - ca), 0, 1));
+  SC.active = SC.f < 0.5 ? a : b;
+  SC.focus = SC.f < 0.12 ? a : SC.f > 0.88 ? b : -1;
   const max = document.documentElement.scrollHeight - vh;
   SC.progress = max > 0 ? scrollY / max : 0;
 }
@@ -214,25 +169,17 @@ function readScroll() {
 const dotsEl = $('#dots'), listEl = $('#drawer-list');
 sections.forEach((s, i) => {
   const d = document.createElement('button');
-  d.innerHTML = `<span>${s.title}</span>`;
-  d.setAttribute('aria-label', s.title);
+  d.innerHTML = `<span>${s.title}</span>`; d.setAttribute('aria-label', s.title);
   d.addEventListener('click', () => goTo(s.id));
   dotsEl.appendChild(d);
   const li = document.createElement('li');
-  li.innerHTML = `<button><span class="n">${String(i).padStart(2, '0')}</span><span><span class="t">${s.title}</span><span class="d">${s.desc}</span></span></button>`;
+  li.innerHTML = `<button><span class="n">${String(i).padStart(2, '0')}</span><span><span class="t">${s.title}</span><span class="d">${s.hint}</span></span></button>`;
   li.firstChild.addEventListener('click', () => { closeMenu(); goTo(s.id); });
   listEl.appendChild(li);
 });
 const dotBtns = $$('button', dotsEl), listBtns = $$('button', listEl);
-
-function goTo(id) {
-  const s = byId[id];
-  if (!s) return;
-  const extra = s.h > innerHeight * 1.2 ? innerHeight * 0.05 : 0;
-  window.scrollTo({ top: s.top + extra, behavior: reduceMotion ? 'auto' : 'smooth' });
-}
+function goTo(id) { const s = byId[id]; if (s) window.scrollTo({ top: s.top, behavior: reduceMotion ? 'auto' : 'smooth' }); }
 $$('[data-goto]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); goTo(b.dataset.goto); }));
-
 const menuBtn = $('#menu-btn');
 function openMenu() { document.body.classList.add('menu-open'); menuBtn.setAttribute('aria-expanded', 'true'); $('#drawer').setAttribute('aria-hidden', 'false'); }
 function closeMenu() { document.body.classList.remove('menu-open'); menuBtn.setAttribute('aria-expanded', 'false'); $('#drawer').setAttribute('aria-hidden', 'true'); }
@@ -241,17 +188,149 @@ $('#drawer-backdrop').addEventListener('click', closeMenu);
 $('.drawer-close').addEventListener('click', closeMenu);
 $$('[data-open-menu]').forEach((b) => b.addEventListener('click', openMenu));
 
-let lastActive = -1;
-function updateNav() {
-  $('#progress-bar').style.transform = `scaleX(${SC.progress})`;
-  if (SC.active === lastActive) return;
-  lastActive = SC.active;
-  $('#menu-count').textContent = `${String(SC.active).padStart(2, '0')}/${String(sections.length - 1).padStart(2, '0')}`;
-  dotBtns.forEach((d, i) => d.classList.toggle('on', i === SC.active));
-  listBtns.forEach((d, i) => { d.classList.toggle('on', i === SC.active); d.classList.toggle('done', i < SC.active); });
+/* ---------------- HUD, panel y puntos ---------------- */
+const hud = $('#hud'), hudDock = $('#hud-dock'), sheetBody = $('#sheet-body');
+let hudSection = -1, openNode = null, openHome = null;
+const visited = new Set();
+
+function openInfo(secId, infoId) {
+  const sec = byId[secId];
+  const node = sec?.infos?.querySelector(`[data-info="${infoId}"]`);
+  if (!node) return;
+  closeSheet(true);
+  openNode = node; openHome = sec.infos;
+  node.hidden = false;
+  sheetBody.appendChild(node);
+  $('#sheet-kicker').textContent = `${String(sec.i).padStart(2, '0')} · ${sec.title}`;
+  document.body.classList.add('sheet-open');
+  $('#sheet').setAttribute('aria-hidden', 'false');
+  S.focus = infoId === 'main' ? null : infoId;
+  S.focusT = clock;
+  visited.add(secId + ':' + infoId);
+  onFocusAction(secId, infoId);
+}
+function closeSheet(keepFocus) {
+  if (openNode) { openNode.hidden = true; openHome.appendChild(openNode); openNode = null; }
+  document.body.classList.remove('sheet-open');
+  $('#sheet').setAttribute('aria-hidden', 'true');
+  if (!keepFocus) S.focus = null;
+}
+$('.sheet-close').addEventListener('click', () => closeSheet());
+$('#hud-info').addEventListener('click', () => openInfo(sections[hudSection].id, 'main'));
+$('#hud-next').addEventListener('click', () => { const n = sections[Math.min(hudSection + 1, sections.length - 1)]; goTo(n.id); });
+canvas.addEventListener('click', () => { if (document.body.classList.contains('sheet-open')) closeSheet(); });
+addEventListener('keydown', (e) => { if (e.code === 'Escape') { if (game.on) quitGame(); else { closeSheet(); closeMenu(); } } });
+
+function setHud(i) {
+  if (i === hudSection) return;
+  closeSheet();
+  if (hudSection >= 0) { const old = sections[hudSection]; if (old.dock) old.el.appendChild(old.dock); }
+  hudSection = i;
+  const s = sections[i];
+  document.body.classList.toggle('hero-mode', s.id === 'inicio');
+  hud.classList.add('swap');
+  setTimeout(() => {
+    $('#hud-num').textContent = String(i).padStart(2, '0');
+    $('#hud-title').textContent = s.title;
+    $('#hud-hint').textContent = s.hint;
+    hudDock.replaceChildren();
+    if (s.dock) hudDock.appendChild(s.dock);
+    $('#hud-next').style.visibility = i === sections.length - 1 ? 'hidden' : 'visible';
+    hud.classList.remove('swap');
+  }, 180);
+  $('#menu-count').textContent = `${String(i).padStart(2, '0')}/${String(sections.length - 1).padStart(2, '0')}`;
+  dotBtns.forEach((d, k) => d.classList.toggle('on', k === i));
+  listBtns.forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('done', k < i); });
 }
 
-/* ---------------- Controles de cada paso ---------------- */
+const pa = (b, k) => () => parts(b())[k];
+const HOT = {
+  inicio: [{ id: 'mitabla', label: 'Mi tabla', a: () => W.anchors.topC }],
+  tabla: [
+    { id: 'nose', label: 'Nose', a: () => (S.dir > 0 ? W.anchors.nose : W.anchors.tail) },
+    { id: 'tail', label: 'Tail', a: () => (S.dir > 0 ? W.anchors.tail : W.anchors.nose), left: true },
+    { id: 'cantos', label: 'Cantos', a: () => W.anchors.edge },
+    { id: 'base', label: 'Base', a: () => W.anchors.baseSpot },
+    { id: 'rocker', label: 'Rocker', a: () => W.anchors.rocker },
+  ],
+  fijaciones: [
+    { id: 'highback', label: 'Highback', a: pa(bF, 'aHighback'), left: true },
+    { id: 'straps', label: 'Straps', a: pa(bF, 'aAnkle') },
+    { id: 'disco', label: 'Disco', a: pa(bF, 'aDisc') },
+    { id: 'angulos', label: 'Ángulos', a: pa(bB, 'aToe'), left: true },
+  ],
+  stance: [
+    { id: 'test', label: '¿Cuál eres?', a: () => W.anchors.center },
+    { id: 'izq', label: 'Pie izq.', a: () => parts(W.bindL).aFoot, left: true },
+    { id: 'der', label: 'Pie der.', a: () => parts(W.bindR).aFoot },
+    { id: 'nose', label: 'Hacia aquí', a: () => W.arrow.userData.tip },
+  ],
+  postura: [
+    { id: 'mirada', label: 'Mirada', a: () => P.aHead },
+    { id: 'hombros', label: 'Hombros', a: () => P.aShoulder, left: true },
+    { id: 'cadera', label: 'Cadera', a: () => P.aHip },
+    { id: 'rodillas', label: 'Rodillas', a: () => P.aKnee },
+  ],
+  pedales: [
+    { id: 'pieizq', label: 'Pedal izq.', a: () => parts(W.bindL).aFoot, left: true },
+    { id: 'pieder', label: 'Pedal der.', a: () => parts(W.bindR).aFoot },
+  ],
+  cantos: [
+    { id: 'talones', label: 'Talones', a: () => W.anchors.heelEdge, left: true },
+    { id: 'puntas', label: 'Puntas', a: () => W.anchors.toeEdge },
+  ],
+  hoja: [
+    { id: 'ejercicio', label: 'Cómo', a: () => P.aHead },
+    { id: 'huella', label: 'La huella', a: () => W.anchors.center },
+  ],
+  giro: [
+    { id: 'mirada', label: '1 · Mira', a: () => P.aHead },
+    { id: 'pedal', label: '2 · Pedal', a: pa(bF, 'aFoot') },
+    { id: 'plana', label: '3 · Plana', a: () => W.anchors.center, left: true },
+    { id: 'cambio', label: '4 · Canto', a: () => W.anchors.toeEdge },
+  ],
+  trucos: [{ id: 'pasos', label: 'Cómo se hace', a: () => P.aHead }],
+  consejos: TIPS.map((t, i) => ({ id: 'tip' + i, tip: t.e, label: t.t, a: () => W.ring[i], left: Math.cos((i / 8) * Math.PI * 2 + 0.3) < 0 })),
+};
+
+// Consejos → panel
+$('#tips-infos').insertAdjacentHTML('beforeend', TIPS.map((t, i) => `<div class="info" data-info="tip${i}" hidden><div class="tip-emoji">${t.e}</div><h3>${t.t}</h3><p>${t.d}</p></div>`).join(''));
+
+const hotRoot = $('#hotspots');
+const HOTS = [];
+for (const secId in HOT) for (const h of HOT[secId]) {
+  const el = document.createElement('button');
+  el.className = 'hot' + (h.left ? ' left' : '') + (h.tip ? ' tip' : '');
+  el.innerHTML = `<i class="dot"></i><span class="lbl">${h.tip ? `<span class="e">${h.tip}</span> ` : ''}<span class="t">${h.label}</span></span>`;
+  el.setAttribute('aria-label', h.label);
+  el.addEventListener('click', (e) => { e.stopPropagation(); openInfo(secId, h.id); });
+  hotRoot.appendChild(el);
+  HOTS.push({ ...h, sec: secId, el, on: false });
+}
+const _p = new THREE.Vector3();
+function updateHotspots(vw, vh) {
+  const focusId = game.on ? null : SC.focus >= 0 ? sections[SC.focus].id : null;
+  for (const H of HOTS) {
+    const show = H.sec === focusId;
+    if (show !== H.on) { H.on = show; H.el.classList.toggle('on', show); }
+    H.el.classList.toggle('active', S.focus === H.id && H.sec === focusId);
+    H.el.classList.toggle('visited', visited.has(H.sec + ':' + H.id));
+    if (!show) continue;
+    H.a().getWorldPosition(_p).project(camera);
+    if (_p.z > 1) { H.el.style.opacity = 0; continue; }
+    H.el.style.opacity = '';
+    const x = clamp((_p.x * 0.5 + 0.5) * vw, 24, vw - 24), y = clamp((-_p.y * 0.5 + 0.5) * vh, 70, vh - 24);
+    H.el.style.transform = H.left ? `translate(calc(${x}px - 100%), ${y}px)` : `translate(${x}px, ${y}px)`;
+  }
+}
+
+function onFocusAction(secId, id) {
+  if (secId === 'cantos' && (id === 'talones' || id === 'puntas')) setEdge(id === 'talones' ? 'back' : 'front');
+  if (secId === 'pedales' && (id === 'pieizq' || id === 'pieder')) S.demo = { side: id === 'pieizq' ? 'L' : 'R', until: clock + 2.8 };
+  if (secId === 'trucos') S.trickClock = 0;
+}
+
+/* ---------------- Controles ---------------- */
 function segGroup(selector, attr, onPick) {
   $$(selector).forEach((btn) => btn.addEventListener('click', () => {
     const val = btn.dataset[attr];
@@ -259,91 +338,63 @@ function segGroup(selector, attr, onPick) {
     onPick(val, btn);
   }));
 }
-
-// Ángulos
 const angFront = $('#ang-front'), angBack = $('#ang-back');
 const fmt = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '°';
-function angleTip() {
-  const f = S.angF, b = S.angB;
+function setAngles(f, b) {
+  S.angF = f; S.angB = b; angFront.value = f; angBack.value = b;
+  $('#out-front').textContent = fmt(f); $('#out-back').textContent = fmt(b);
   let t;
   if (f > 0 && b < 0) t = 'Duck (pato): las dos puntas hacia fuera. La más cómoda para empezar y para ir en los dos sentidos.';
-  else if (f >= 0 && b >= 0 && (f > 0 || b > 0)) t = 'Adelante: los dos pies apuntan hacia el nose. Más control en carving, menos para ir en switch.';
-  else if (f === 0 && b === 0) t = 'Plano: pies rectos. Estable, pero las rodillas trabajan más forzadas.';
-  else t = 'Ojo: el pie delantero mirando hacia atrás es raro y fuerza la rodilla. Prueba +15 / −6.';
+  else if (f >= 0 && b >= 0 && (f > 0 || b > 0)) t = 'Adelante: los dos pies hacia el nose. Más control en carving, peor para ir en switch.';
+  else if (f === 0 && b === 0) t = 'Plano: pies rectos. Estable, pero las rodillas trabajan más.';
+  else t = 'Ojo: el pie delantero mirando hacia atrás fuerza la rodilla. Prueba +15 / −6.';
   $('#angle-tip').textContent = t;
-}
-function setAngles(f, b) {
-  S.angF = f; S.angB = b;
-  angFront.value = f; angBack.value = b;
-  $('#out-front').textContent = fmt(f); $('#out-back').textContent = fmt(b);
-  angleTip();
 }
 angFront.addEventListener('input', () => { setAngles(+angFront.value, S.angB); $$('[data-preset]').forEach((x) => x.classList.remove('on')); });
 angBack.addEventListener('input', () => { setAngles(S.angF, +angBack.value); $$('[data-preset]').forEach((x) => x.classList.remove('on')); });
 segGroup('[data-preset]', 'preset', (v) => { const [f, b] = v.split(',').map(Number); setAngles(f, b); });
 
-// Regular / goofy
-function setStance(st) {
-  S.stance = st;
-  store.set('stance', st);
-  $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st));
-}
+function setStance(st) { S.stance = st; store.set('stance', st); $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st)); }
 segGroup('[data-stance]', 'stance', setStance);
 setStance(S.stance);
 
-// Test
+function setSkin(sk) { S.skin = sk; store.set('skin', sk); W.setSkin(sk); $$('[data-skin]').forEach((b) => b.classList.toggle('on', b.dataset.skin === sk)); }
+$$('[data-skin]').forEach((b) => b.addEventListener('click', () => setSkin(b.dataset.skin)));
+setSkin(S.skin);
+
 const answers = [];
 $$('#quiz .q').forEach((q) => {
   const qi = +q.dataset.q;
   $$('button', q).forEach((b) => b.addEventListener('click', () => {
     $$('button', q).forEach((x) => x.classList.toggle('on', x === b));
     answers[qi] = b.dataset.a;
-    const filled = answers.filter(Boolean);
-    if (filled.length === 3) {
-      // Las dos primeras: pie que va delante. La tercera: pie que chuta (suele ir detrás).
-      let left = 0;
-      if (answers[0] === 'L') left++;
-      if (answers[1] === 'L') left++;
-      if (answers[2] === 'R') left++;
+    if (answers.filter(Boolean).length === 3) {
+      let left = (answers[0] === 'L') + (answers[1] === 'L') + (answers[2] === 'R');
       const st = left >= 2 ? 'regular' : 'goofy';
       setStance(st);
-      const r = $('#quiz-result');
-      r.hidden = false;
-      r.innerHTML = st === 'regular'
-        ? '<b>Eres REGULAR</b>Pie izquierdo delante. Mira la tabla: la fijación de delante apunta hacia el nose.'
-        : '<b>Eres GOOFY</b>Pie derecho delante. Mira cómo la tabla cambia: tu nose ahora está a la derecha.';
+      const r = $('#quiz-result'); r.hidden = false;
+      r.innerHTML = st === 'regular' ? '<b>Eres regular</b>Pie izquierdo delante. Mira la tabla: ya está ajustada para ti.' : '<b>Eres goofy</b>Pie derecho delante. Mira cómo cambia la tabla: tu nose ahora está a la derecha.';
     }
   }));
 });
-
-// Postura
 segGroup('[data-crouch]', 'crouch', (v) => { S.crouch = +v; });
-
-// Canto
-function setEdge(e) {
-  S.edge = e;
-  $$('[data-edge]').forEach((b) => b.classList.toggle('on', b.dataset.edge === e));
-}
+function setEdge(e) { S.edge = e; $$('[data-edge]').forEach((b) => b.classList.toggle('on', b.dataset.edge === e)); }
 $$('[data-edge]').forEach((b) => b.addEventListener('click', () => setEdge(b.dataset.edge)));
 
-// Trucos
 function showTrick(name) {
   S.trick = name; S.trickClock = 0; S.trickYawBase = 0; S.trickYawS = 0;
   const t = TRICKS[name];
-  $('#trick-info').innerHTML = `<h4>${t.name}</h4><span class="lvl">${t.level}</span><p>${t.desc}</p><ol class="steps-list">${t.steps.map((s) => `<li>${s}</li>`).join('')}</ol>`;
+  $('#trick-info').innerHTML = `<div class="trick-info"><h3>${t.name}</h3><span class="lvl">${t.level}</span><p>${t.desc}</p><ol class="steps-list">${t.steps.map((s) => `<li>${s}</li>`).join('')}</ol></div>`;
 }
-segGroup('[data-trick]', 'trick', showTrick);
+segGroup('[data-trick]', 'trick', (v) => { showTrick(v); if (hudSection === byId.trucos.i) openInfo('trucos', 'pasos'); });
 showTrick('ollie');
 
-// Consejos
-$('#tips').innerHTML = TIPS.map((t) => `<div class="tip${t.todo ? ' todo' : ''}"><div class="e">${t.e}</div><h4>${t.t}</h4><p>${t.d}</p></div>`).join('');
-
-/* ---------------- Pedales (entrada) ---------------- */
+/* ---------------- Pedales ---------------- */
 const input = { L: new Set(), R: new Set(), kL: false, kR: false };
-$$('[data-pedal]').forEach((btn) => {
+$$('[data-pedal]').forEach((btn, n) => {
   const side = btn.dataset.pedal;
-  const down = (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); input[side].add(btn.id + e.pointerId); btn.classList.add('down'); };
-  const up = (e) => { input[side].delete(btn.id + e.pointerId); if (![...input[side]].length) btn.classList.remove('down'); };
+  const down = (e) => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); input[side].add(n + ':' + e.pointerId); btn.classList.add('down'); };
+  const up = (e) => { input[side].delete(n + ':' + e.pointerId); if (![...input[side]].some((k) => k.startsWith(n + ':'))) btn.classList.remove('down'); };
   btn.addEventListener('pointerdown', down);
   btn.addEventListener('pointerup', up);
   btn.addEventListener('pointercancel', up);
@@ -351,436 +402,317 @@ $$('[data-pedal]').forEach((btn) => {
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 });
 const keyMap = { ArrowLeft: 'kL', KeyA: 'kL', ArrowRight: 'kR', KeyD: 'kR' };
-addEventListener('keydown', (e) => {
-  if (keyMap[e.code]) { input[keyMap[e.code]] = true; if (G.on) e.preventDefault(); }
-  if (e.code === 'Escape') { if (G.on) endGame(true); else closeMenu(); }
-});
+addEventListener('keydown', (e) => { if (keyMap[e.code]) { input[keyMap[e.code]] = true; if (game.on) e.preventDefault(); } });
 addEventListener('keyup', (e) => { if (keyMap[e.code]) input[keyMap[e.code]] = false; });
 addEventListener('blur', () => { input.kL = input.kR = false; input.L.clear(); input.R.clear(); $$('.pedal.down').forEach((b) => b.classList.remove('down')); });
-const inL = () => input.kL || input.L.size > 0;
-const inR = () => input.kR || input.R.size > 0;
+const demoOn = (side) => S.demo && S.demo.side === side && clock < S.demo.until && Math.sin((S.demo.until - clock) * 3) > -0.6;
+const inL = () => input.kL || input.L.size > 0 || demoOn('L');
+const inR = () => input.kR || input.R.size > 0 || demoOn('R');
 
 /* ---------------- Juego ---------------- */
-const G = { on: false, over: false, score: 0, lives: 3, speed: 3, best: store.get('best', 0), msgT: 0, lastX: 0 };
-$('#best-score').textContent = G.best;
-const gameEl = $('#game');
-
-function placeGate(gate, z) {
-  const gap = Math.max(2.05, 2.9 - G.score * 0.05);
-  const x = clamp(G.lastX + (Math.random() * 2 - 1) * 1.6, -1.7, 1.7);
-  G.lastX = x;
-  gate.position.set(x, 0, z);
-  gate.userData.gap = gap;
-  gate.userData.done = false;
-  const [lp, lf] = gate.userData.left, [rp, rf] = gate.userData.right;
-  lp.position.x = -gap / 2; lf.position.x = -gap / 2 + 0.24;
-  rp.position.x = gap / 2; rf.position.x = gap / 2 - 0.24;
-  gate.visible = true;
-}
-function startGame() {
-  G.on = true; G.over = false; G.score = 0; G.lives = 3; G.speed = 3.2; G.lastX = 0;
-  S.sim.x = 0; S.sim.v = 0; setEdge('back');
-  W.gates.forEach((g, i) => placeGate(g, 9 + i * 7.5));
-  document.body.classList.add('playing');
-  gameEl.hidden = false;
-  $('#game-over').hidden = true;
-  updateHud();
-  gameMsg('¡Usa los pedales!');
-}
-function endGame(quit) {
-  if (quit) {
-    G.on = false;
-    document.body.classList.remove('playing');
-    gameEl.hidden = true;
-    W.gates.forEach((g) => (g.visible = false));
-    return;
-  }
-  G.over = true;
-  if (G.score > G.best) { G.best = G.score; store.set('best', G.best); }
-  $('#best-score').textContent = G.best;
-  $('#final-score').textContent = G.score;
-  $('#final-best').textContent = G.best;
-  $('#game-over').hidden = false;
-}
-function updateHud() {
-  $('#score').textContent = G.score;
-  $('#lives').textContent = '❤'.repeat(G.lives) + '♡'.repeat(3 - G.lives);
-}
+let gameMode = 'libre';
+const fmtTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
+function showBest() { const b = store.get('best-' + gameMode, 0); $('#best-score').textContent = b ? fmtTime(b) : '—'; }
+segGroup('[data-mode]', 'mode', (v) => { gameMode = v; showBest(); });
+showBest();
 let msgTimer;
-function gameMsg(t) {
-  const m = $('#game-msg');
-  m.textContent = t; m.classList.add('on');
-  clearTimeout(msgTimer);
-  msgTimer = setTimeout(() => m.classList.remove('on'), 900);
-}
-function flash() {
-  const f = $('#flash');
-  f.classList.add('on');
-  requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on')));
-  navigator.vibrate?.(120);
-}
-$('#play-btn').addEventListener('click', startGame);
-$('#again-btn').addEventListener('click', startGame);
-$('#quit-btn').addEventListener('click', () => endGame(true));
-$('#game-exit').addEventListener('click', () => endGame(true));
+const gameUI = {
+  start(mode) {
+    document.body.classList.add('playing');
+    $('#game').hidden = false; $('#game-over').hidden = true;
+    $('#g-gates').textContent = mode === 'slalom' ? 'Puertas 0' : 'Pista roja';
+    closeSheet();
+  },
+  stop() { document.body.classList.remove('playing'); $('#game').hidden = true; },
+  countdown(v) { const m = $('#game-msg'); m.textContent = v; m.classList.add('on'); m.classList.remove('bad'); clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.remove('on'), 500); },
+  msg(t, bad) {
+    const m = $('#game-msg'); m.textContent = t; m.classList.add('on'); m.classList.toggle('bad', !!bad);
+    clearTimeout(msgTimer); msgTimer = setTimeout(() => m.classList.remove('on'), 800);
+    if (bad) { const f = $('#flash'); f.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('on'))); navigator.vibrate?.(80); }
+  },
+  hud(d) {
+    $('#g-speed').textContent = Math.round(d.kmh);
+    $('#g-time').textContent = fmtTime(d.time);
+    $('#g-prog').style.transform = `scaleX(${d.progress.toFixed(3)})`;
+    if (d.mode === 'slalom') $('#g-gates').textContent = `Puertas ${d.gates}`;
+  },
+  finish(r) {
+    $('#go-title').textContent = r.isBest ? '¡Nuevo récord!' : '¡Bajada completada!';
+    $('#go-time').textContent = fmtTime(r.time);
+    $('#go-top').textContent = Math.round(r.top * 3.6);
+    $('#go-gates-box').hidden = r.mode !== 'slalom';
+    $('#go-gates').textContent = `${r.gates}/${r.total}`;
+    $('#go-best').textContent = r.isBest ? 'Tu mejor tiempo en esta pista.' : `Tu récord: ${fmtTime(r.best)}`;
+    setTimeout(() => { $('#game-over').hidden = false; }, 900);
+    showBest();
+  },
+};
+const game = createGame({ W, camera, S, inL, inR, store, ui: gameUI });
+function quitGame() { game.stop(); W.shadow.quaternion.identity(); }
+$('#play-btn').addEventListener('click', () => game.start(gameMode));
+$('#again-btn').addEventListener('click', () => game.start(gameMode));
+$('#quit-btn').addEventListener('click', quitGame);
+$('#game-exit').addEventListener('click', quitGame);
 
-function stepGame(dt) {
-  if (G.over) return;
-  G.speed = Math.min(8, 3.2 + G.score * 0.14);
-  let maxZ = -Infinity;
-  for (const g of W.gates) maxZ = Math.max(maxZ, g.position.z);
-  for (const g of W.gates) {
-    g.position.z -= S.sim.speed * dt;
-    if (!g.userData.done && g.position.z < 0) {
-      g.userData.done = true;
-      const ok = Math.abs(S.sim.x - g.position.x) < g.userData.gap / 2 - 0.35;
-      if (ok) { G.score++; gameMsg(G.score % 5 === 0 ? `¡${G.score}! 🔥` : ['¡Bien!', '¡Eso es!', '¡Dentro!', '¡Pedalazo!'][G.score % 4]); }
-      else { G.lives--; flash(); gameMsg('¡Fuera!'); if (G.lives <= 0) endGame(false); }
-      updateHud();
-    }
-    if (g.position.z < -5) placeGate(g, maxZ + 7.5);
-  }
-}
-
-/* ---------------- Simulación en la pista ---------------- */
+/* ---------------- Simulación en la pista de prácticas ---------------- */
 function stepSim(dt, mode, t) {
   const sim = S.sim;
   let tL = 0, tR = 0, speed = 0, spring = 0;
   const edgeSign = S.edge === 'back' ? 1 : -1;
   S.edgeYaw = damp(S.edgeYaw, S.edge === 'back' ? 0 : Math.PI, 4, dt);
-
-  if (mode === 'drill' || mode === 'game') { tL = inL() ? 1 : 0; tR = inR() ? 1 : 0; speed = mode === 'game' ? G.speed : 0.7; }
+  if (mode === 'drill') { tL = inL() ? 1 : 0; tR = inR() ? 1 : 0; speed = 0.7; }
   else if (mode === 'leaf') { const s = Math.sin(t * 0.75); tL = clamp(s * 1.8, 0, 1); tR = clamp(-s * 1.8, 0, 1); speed = 0.8; spring = 0.35; }
   else if (mode === 'hold') { tL = tR = 0.35; speed = 0.45; spring = 2; }
-  else if (mode === 'turn') { tL = tR = 0; speed = 2.0; }
-  if (G.on && G.over) { tL = tR = 0; speed = damp(sim.speed, 0, 2, dt); }
-
-  S.pL = damp(S.pL, tL, 9, dt);
-  S.pR = damp(S.pR, tR, 9, dt);
+  else if (mode === 'turn') speed = 2.0;
+  S.pL = damp(S.pL, tL, 9, dt); S.pR = damp(S.pR, tR, 9, dt);
   sim.speed = damp(sim.speed, speed, 3, dt);
   const d = S.pL - S.pR;
-
   if (mode === 'turn') {
     const A = 1.35, w = 0.8;
     sim.phi += dt * w;
-    const x = A * Math.sin(sim.phi);
-    const vx = A * w * Math.cos(sim.phi), vz = Math.max(0.6, sim.speed);
-    const ax = -A * w * w * Math.sin(sim.phi);
+    const x = A * Math.sin(sim.phi), vx = A * w * Math.cos(sim.phi), vz = Math.max(0.6, sim.speed), ax = -A * w * w * Math.sin(sim.phi);
     sim.v = (x - sim.x) / Math.max(dt, 1e-3);
     sim.x = damp(sim.x, x, 10, dt);
     const yawT = S.dir > 0 ? Math.atan2(-vz, vx) : Math.atan2(vz, -vx);
     sim.yaw += wrapAngle(yawT - sim.yaw) * (1 - Math.exp(-8 * dt));
-    const rollT = clamp(ax * Math.sin(sim.yaw) * 0.7, -0.34, 0.34);
-    sim.roll = damp(sim.roll, rollT, 6, dt);
+    sim.roll = damp(sim.roll, clamp(ax * Math.sin(sim.yaw) * 0.7, -0.34, 0.34), 6, dt);
     sim.pitch = damp(sim.pitch, 0, 6, dt);
     S.edgeYaw = sim.yaw;
-    // Pedal del pie delantero al iniciar cada giro
     const front = Math.abs(Math.cos(sim.phi));
-    if (S.dir > 0) { S.pL = damp(S.pL, front, 6, dt); S.pR = damp(S.pR, 0.2, 6, dt); }
-    else { S.pR = damp(S.pR, front, 6, dt); S.pL = damp(S.pL, 0.2, 6, dt); }
+    if (S.dir > 0) { S.pL = damp(S.pL, front, 6, dt); S.pR = damp(S.pR, 0.2, 6, dt); } else { S.pR = damp(S.pR, front, 6, dt); S.pL = damp(S.pL, 0.2, 6, dt); }
     const lbl = sim.roll > 0.07 ? 'Front · puntas' : sim.roll < -0.07 ? 'Back · talones' : 'Plana · cambio de canto';
     const el = $('#turn-label');
     if (el.textContent !== lbl) el.textContent = lbl;
-    $('#turn-phase span').style.color = sim.roll > 0.07 ? 'var(--orange)' : sim.roll < -0.07 ? 'var(--cyan)' : 'var(--lime)';
+    $('#turn-phase span').style.color = sim.roll > 0.07 ? 'var(--red)' : sim.roll < -0.07 ? 'var(--blue)' : '#fff';
   } else {
-    const acc = mode === 'game' ? 5 : 2.8, fr = mode === 'game' ? 2.4 : 1.6;
-    sim.v += (d * acc - sim.x * spring * edgeSign) * dt;
-    sim.v *= Math.exp(-fr * dt);
+    sim.v += (d * 2.8 - sim.x * spring * edgeSign) * dt;
+    sim.v *= Math.exp(-1.6 * dt);
     sim.x += sim.v * edgeSign * dt;
-    const lim = mode === 'game' ? 2.4 : 1.7;
-    if (Math.abs(sim.x) > lim) { sim.x = Math.sign(sim.x) * lim; sim.v *= -0.2; }
-    const yawT = S.edgeYaw - d * 0.3 * edgeSign;
-    sim.yaw += wrapAngle(yawT - sim.yaw) * (1 - Math.exp(-6 * dt));
-    const rollMag = mode === 'hold' ? 0.3 : 0.13;
-    sim.roll = damp(sim.roll, -rollMag * edgeSign, 5, dt);
+    if (Math.abs(sim.x) > 1.7) { sim.x = Math.sign(sim.x) * 1.7; sim.v *= -0.2; }
+    sim.yaw += wrapAngle(S.edgeYaw - d * 0.3 * edgeSign - sim.yaw) * (1 - Math.exp(-6 * dt));
+    sim.roll = damp(sim.roll, -(mode === 'hold' ? 0.3 : 0.13) * edgeSign, 5, dt);
     sim.pitch = damp(sim.pitch, -d * 0.05, 6, dt);
   }
 }
 
-/* ---------------- Trucos ---------------- */
 function trickState(name, u) {
   const o = { y: 0, pitch: 0, yaw: 0, crouch: 0.5, shifty: 0, shiftX: 0, arms: 0.4 };
   const air = (a, b) => { const s = clamp((u - a) / (b - a), 0, 1); return 4 * s * (1 - s); };
   const pop = (sign) => {
     o.crouch = 0.5 + 0.4 * smooth(0, 0.2, u) - 0.75 * smooth(0.2, 0.27, u) + 0.6 * smooth(0.3, 0.4, u) - 0.15 * smooth(0.45, 0.55, u) + 0.25 * smooth(0.55, 0.6, u) - 0.35 * smooth(0.62, 0.85, u);
     o.pitch = sign * (0.34 * smooth(0.18, 0.26, u) - 0.4 * smooth(0.28, 0.42, u) + 0.06 * smooth(0.48, 0.58, u));
-    o.y = air(0.25, 0.6) * 0.5;
-    o.arms = 0.4 + air(0.25, 0.6) * 0.5;
+    o.y = air(0.25, 0.6) * 0.5; o.arms = 0.4 + air(0.25, 0.6) * 0.5;
   };
   if (name === 'ollie') pop(1);
   if (name === 'nollie') pop(-1);
   if (name === 'shifty') { pop(1); o.shifty = 0.75 * (smooth(0.3, 0.4, u) - smooth(0.45, 0.56, u)); }
   if (name === 'spin') { pop(1); o.yaw = Math.PI * smooth(0.27, 0.6, u); }
-  if (name === 'press') {
-    const k = smooth(0.12, 0.28, u) - smooth(0.62, 0.78, u);
-    o.pitch = -0.22 * k;
-    o.crouch = 0.5 + 0.15 * k;
-    o.shiftX = 0.14 * k;
-    o.arms = 0.4 + 0.3 * k;
-  }
+  if (name === 'press') { const k = smooth(0.12, 0.28, u) - smooth(0.62, 0.78, u); o.pitch = -0.22 * k; o.crouch = 0.5 + 0.15 * k; o.shiftX = 0.14 * k; o.arms = 0.4 + 0.3 * k; }
   return o;
 }
 
-/* ---------------- Etiquetas 3D ---------------- */
-const labelRoot = $('#labels');
-const LABELS = [
-  { sec: 'tabla', a: () => W.anchors.nose, t: 'Nose', s: 'punta delantera', o: [-30, -100], c: 'var(--orange)' },
-  { sec: 'tabla', a: () => W.anchors.tail, t: 'Tail', s: 'cola', o: [-70, -70], c: 'var(--orange)' },
-  { sec: 'tabla', a: () => W.anchors.edge, t: 'Cantos de acero', s: 'agarran la nieve', o: [40, 80] },
-  { sec: 'tabla', a: () => W.anchors.topC, t: 'Top sheet', s: 'la parte de arriba', o: [-30, -110], c: '#fff', when: () => cur.rot[0] < 1.4 },
-  { sec: 'tabla', a: () => W.anchors.baseC, t: 'Base', s: 'lo que desliza · se encera', o: [-30, -110], c: '#fff', when: () => cur.rot[0] > 1.8 },
-  { sec: 'tabla', a: () => W.anchors.rocker, t: 'Rocker', s: 'la punta se levanta', o: [-60, 90], c: 'var(--lime)' },
-  { sec: 'fijaciones', a: () => bF().userData.parts.aHighback, t: 'Highback', s: 'respaldo del gemelo', o: [-110, -60], c: 'var(--orange)' },
-  { sec: 'fijaciones', a: () => bF().userData.parts.aAnkle, t: 'Strap de tobillo', s: 'sujeta el talón', o: [120, -70] },
-  { sec: 'fijaciones', a: () => bF().userData.parts.aToe, t: 'Strap de puntera', s: 'sujeta la punta', o: [120, 40] },
-  { sec: 'fijaciones', a: () => bF().userData.parts.aDisc, t: 'Disco', s: 'aquí giras el ángulo', o: [-60, 100], c: 'var(--lime)' },
-  { sec: 'stance', a: () => W.bindL.userData.parts.aAnkleBone, t: 'Pie izquierdo', dyn: () => (S.dir > 0 ? 'delante' : 'detrás'), o: [-20, -90] },
-  { sec: 'stance', a: () => W.bindR.userData.parts.aAnkleBone, t: 'Pie derecho', dyn: () => (S.dir > 0 ? 'detrás' : 'delante'), o: [20, -90], c: 'var(--orange)' },
-  { sec: 'stance', a: () => W.arrow.userData.tip, t: 'Nose', s: 'hacia aquí vas', o: [0, 80], c: 'var(--lime)' },
-  { sec: 'postura', a: () => P.aHead, t: 'Mirada', s: 'hacia donde vas', o: [-90, -50], c: 'var(--lime)' },
-  { sec: 'postura', a: () => P.aShoulder, t: 'Hombros', s: 'paralelos a la tabla', o: [-120, 10] },
-  { sec: 'postura', a: () => P.aHip, t: 'Cadera centrada', s: 'peso 50 / 50', o: [130, -20], c: 'var(--orange)' },
-  { sec: 'postura', a: () => P.aKnee, t: 'Rodillas', s: 'flexionadas', o: [120, 50] },
-  { sec: 'pedales', a: () => W.bindL.userData.parts.aToe, t: 'Pie izq.', dyn: () => `${Math.round(S.pL * 100)}%`, o: [60, 60] },
-  { sec: 'pedales', a: () => W.bindR.userData.parts.aToe, t: 'Pie der.', dyn: () => `${Math.round(S.pR * 100)}%`, o: [-60, 60], c: 'var(--orange)' },
-  { sec: 'cantos', a: () => W.anchors.heelEdge, t: 'Canto de talones', s: 'BACK', o: [-70, 70] },
-  { sec: 'cantos', a: () => W.anchors.toeEdge, t: 'Canto de puntas', s: 'FRONT', o: [80, -40], c: 'var(--orange)' },
-];
-for (const L of LABELS) {
-  const el = document.createElement('div');
-  el.className = 'label';
-  if (L.c) el.style.setProperty('--c', L.c);
-  el.innerHTML = `<i class="line"></i><i class="dot"></i><span class="tag">${L.t}<small>${L.s || ''}</small></span>`;
-  labelRoot.appendChild(el);
-  L.el = el; L.line = el.querySelector('.line'); L.tag = el.querySelector('.tag'); L.small = el.querySelector('small');
-  L.on = false; L.lastDyn = '';
-}
-const tipAnchor = new THREE.Object3D(); tipAnchor.position.set(0.5, 0, 0); W.arrow.add(tipAnchor); W.arrow.userData.tip = tipAnchor;
-
-const _p = new THREE.Vector3();
-function updateLabels(vw, vh, mobile) {
-  const focusId = G.on ? null : SC.focus >= 0 ? sections[SC.focus].id : null;
-  const k = mobile ? 0.62 : 1;
-  for (const L of LABELS) {
-    const show = L.sec === focusId && (!L.when || L.when());
-    if (show !== L.on) { L.on = show; L.el.classList.toggle('on', show); }
-    if (!show) continue;
-    L.a().getWorldPosition(_p).project(camera);
-    if (_p.z > 1) continue;
-    const x = (_p.x * 0.5 + 0.5) * vw, y = (-_p.y * 0.5 + 0.5) * vh;
-    let dx = L.o[0] * k, dy = L.o[1] * k;
-    const tx = clamp(x + dx, 70, vw - 70);
-    dx = tx - x;
-    L.el.style.transform = `translate(${x}px, ${y}px)`;
-    L.tag.style.left = dx + 'px'; L.tag.style.top = dy + 'px';
-    const len = Math.hypot(dx, dy);
-    L.line.style.width = len + 'px';
-    L.line.style.transform = `rotate(${Math.atan2(dy, dx)}rad)`;
-    if (L.dyn) { const v = L.dyn(); if (v !== L.lastDyn) { L.small.textContent = v; L.lastDyn = v; } }
-  }
-}
-
-/* ---------------- Huella ---------------- */
+/* ---------------- Huella (pista de prácticas) ---------------- */
 const trailPts = [];
 let trailAcc = 0;
 function stepTrail(dt, active, speed) {
-  const posAttr = W.trail.geometry.attributes.position;
   for (const p of trailPts) p.z -= speed * dt;
   while (trailPts.length && trailPts[0].z < -8) trailPts.shift();
   trailAcc += dt;
   if (active && trailAcc > 1 / 40) {
     trailAcc = 0;
-    const yaw = W.rig.rotation.y;
-    const ax = Math.cos(yaw), az = -Math.sin(yaw);
+    const yaw = W.rig.rotation.y, ax = Math.cos(yaw), az = -Math.sin(yaw);
     const last = trailPts[trailPts.length - 1];
     let mx = 0, mz = 1;
-    if (last) { mx = W.rig.position.x - last.x; mz = 0 - last.z; const l = Math.hypot(mx, mz) || 1; mx /= l; mz /= l; }
+    if (last) { mx = W.rig.position.x - last.x; mz = -last.z; const l = Math.hypot(mx, mz) || 1; mx /= l; mz /= l; }
     const px = mz, pz = -mx;
-    const hw = 0.66 * Math.abs(ax * px + az * pz) + 0.07;
-    trailPts.push({ x: W.rig.position.x, z: 0, px, pz, hw });
+    trailPts.push({ x: W.rig.position.x, z: 0, px, pz, hw: 0.66 * Math.abs(ax * px + az * pz) + 0.07 });
     if (trailPts.length > W.TRAIL) trailPts.shift();
   }
-  if (!active && trailPts.length && speed < 0.01) trailPts.length = 0;
-  const arr = posAttr.array;
-  const n = trailPts.length;
+  if (!active && speed < 0.01) trailPts.length = 0;
+  const arr = W.trail.geometry.attributes.position.array, n = trailPts.length;
   for (let i = 0; i < W.TRAIL; i++) {
     const p = trailPts[Math.min(i, n - 1)] || { x: 0, z: -100, px: 0, pz: 0, hw: 0 };
-    const fade = i < n ? Math.min(1, (i + 1) / 30) : 0;
-    const hw = p.hw * fade;
+    const hw = p.hw * (i < n ? Math.min(1, (i + 1) / 30) : 0);
     arr[i * 6] = p.x + p.px * hw; arr[i * 6 + 1] = 0; arr[i * 6 + 2] = p.z + p.pz * hw;
     arr[i * 6 + 3] = p.x - p.px * hw; arr[i * 6 + 4] = 0; arr[i * 6 + 5] = p.z - p.pz * hw;
   }
-  posAttr.needsUpdate = true;
+  W.trail.geometry.attributes.position.needsUpdate = true;
 }
 
-/* ---------------- Bucle principal ---------------- */
-const studioTop = new THREE.Color('#050817'), studioBot = new THREE.Color('#1a2550');
-const slopeTop = new THREE.Color('#2f6bb8'), slopeBot = new THREE.Color('#e6f1ff');
-const _c1 = new THREE.Color(), _c2 = new THREE.Color();
+/* ---------------- Bucle ---------------- */
+const studioTop = new THREE.Color('#07080b'), studioBot = new THREE.Color('#25272f');
+const slopeTop = new THREE.Color('#3576c8'), slopeBot = new THREE.Color('#e9f2fc');
 const footL = new THREE.Vector3(), footR = new THREE.Vector3();
-let vw = 0, vh = 0, mobile = false, sideS = 1;
-let lastT = performance.now(), clock = 0;
+let vw = 0, vh = 0, mobile = false, offX = 0, offY = 0, clock = 0, lastT = performance.now();
 const statusEl = $('#pedal-status');
 const meters = $$('.pedal .meter b').map((b) => ({ b, side: b.closest('.pedal').dataset.pedal }));
 
 function resize() {
-  vw = innerWidth; vh = innerHeight;
-  mobile = mobileMQ.matches;
+  vw = innerWidth; vh = innerHeight; mobile = mobileMQ.matches;
   renderer.setSize(vw, vh, false);
   canvas.style.width = vw + 'px'; canvas.style.height = vh + 'px';
-  camera.aspect = vw / vh;
-  camera.updateProjectionMatrix();
+  camera.aspect = vw / vh; camera.updateProjectionMatrix();
   measure();
 }
 addEventListener('resize', resize);
 addEventListener('orientationchange', () => setTimeout(resize, 200));
-new ResizeObserver(() => measure()).observe($('main'));
+new ResizeObserver(measure).observe($('main'));
 resize();
 
 function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000);
-  lastT = now;
-  clock += dt;
+  lastT = now; clock += dt;
   const t = clock;
-
   readScroll();
-  updateNav();
+  $('#progress-bar').style.transform = `scaleX(${SC.progress})`;
+  if (!game.on) setHud(SC.active);
 
-  // Pose objetivo
-  let target, modeId;
-  if (G.on) { target = POSES.game(0, t); modeId = 'game'; }
-  else {
-    const A = sections[SC.a], B = sections[SC.b];
-    target = mixPose(POSES[A.id](SC.pa, t), POSES[B.id](SC.pb, t), SC.f);
-    modeId = SC.f < 0.5 ? A.id : B.id;
-  }
-  dampPose(target, dt, G.on ? 3 : 5);
-
-  // Postura (regular / goofy) y ángulos
   S.dir = damp(S.dir, S.stance === 'goofy' ? -1 : 1, 5, dt);
-  S.angFs = damp(S.angFs, S.angF, 8, dt);
-  S.angBs = damp(S.angBs, S.angB, 8, dt);
-  const deg = Math.PI / 180;
-  const dSign = Math.sign(S.dir) || 1;
+  S.angFs = damp(S.angFs, S.angF, 8, dt); S.angBs = damp(S.angBs, S.angB, 8, dt);
+  const deg = Math.PI / 180, dSign = Math.sign(S.dir) || 1;
   const aF = S.angFs * deg * S.dir, aB = S.angBs * deg * S.dir;
-  // bindL está en +x: es la delantera para regular
   W.bindL.rotation.y = lerp(aB, aF, (S.dir + 1) / 2);
   W.bindR.rotation.y = lerp(aF, aB, (S.dir + 1) / 2);
-  const ex = cur.explode;
-  for (const b of [W.bindL, W.bindR]) {
-    const parts = b.userData.parts;
-    const focusB = b === bF() ? 1 : 0.35;
-    b.position.y = BOARD.T / 2 + 0.002 + ex * 0.16 * focusB;
-    parts.disc.position.y = 0.004 - ex * 0.12 * focusB;
-    parts.highback.rotation.x = -0.22 - ex * 0.35 * focusB;
-    parts.boot.visible = cur.boots > 0.02;
-    parts.boot.scale.setScalar(Math.max(0.001, cur.boots));
-  }
-  W.mats.boot.opacity = W.mats.bootDark.opacity = clamp(cur.boots * 1.5, 0, 1);
 
-  // Simulación
-  const mode = G.on ? 'game' : SIM_MODE[modeId] || 'still';
-  stepSim(dt, mode, t);
-  if (G.on) stepGame(dt);
-  const sim = S.sim, sw = cur.sim;
-
-  // Trucos
-  let tr = { y: 0, pitch: 0, yaw: 0, crouch: 0.5, shifty: 0, shiftX: 0, arms: 0.4 };
-  if (cur.trick > 0.01) {
-    S.trickClock += dt;
-    const period = 2.6;
-    if (S.trickClock > period) { S.trickClock -= period; if (S.trick === 'spin') S.trickYawBase += Math.PI; }
-    tr = trickState(S.trick, S.trickClock / period);
-    S.trickYawS = S.trickYawBase + tr.yaw;
-  }
-  const tw = cur.trick;
-
-  // Rig
+  const secId = sections[SC.active].id;
+  const focusSec = SC.focus >= 0 ? sections[SC.focus].id : null;
   const rig = W.rig;
-  const pitchComp = Math.abs(Math.sin(tr.pitch * tw)) * 0.72;
-  rig.position.set(cur.pos[0] + sim.x * sw, cur.pos[1] + (tr.y + pitchComp) * tw, cur.pos[2]);
-  rig.rotation.set(
-    cur.rot[0] + sim.roll * sw,
-    cur.rot[1] + sim.yaw * sw + S.trickYawS * tw,
-    cur.rot[2] + sim.pitch * sw + tr.pitch * dSign * tw,
-  );
-  W.boardGroup.rotation.y = tr.shifty * tw;
+  let riderOpt = null, modeId = secId, mode = 'still';
+  let tr = { y: 0, pitch: 0, yaw: 0, crouch: 0.5, shifty: 0, shiftX: 0, arms: 0.4 };
 
-  // Bordes, brillos, flecha
-  const edgeShow = cur.edges;
-  const backness = modeId === 'cantos' || modeId === 'hoja' || modeId === 'pedales' ? (S.edge === 'back' ? 1 : 0.15) : 1;
-  const frontness = modeId === 'cantos' || modeId === 'hoja' || modeId === 'pedales' ? (S.edge === 'front' ? 1 : 0.15) : 1;
-  W.heelEdge.material.opacity = edgeShow * backness;
-  W.toeEdge.material.opacity = edgeShow * frontness;
-  const gl = cur.glow;
-  const pl = modeId === 'postura' ? 0.5 : S.pL, pr = modeId === 'postura' ? 0.5 : S.pR;
-  W.glowL.material.opacity = gl * pl * 0.95;
-  W.glowR.material.opacity = gl * pr * 0.95;
-  W.glowL.scale.setScalar(0.7 + pl * 0.6);
-  W.glowR.scale.setScalar(0.7 + pr * 0.6);
-  W.arrow.material.opacity = cur.arrow;
+  if (!game.on) {
+    const A = sections[SC.a], B = sections[SC.b];
+    const target = mixPose(POSES[A.id](t), POSES[B.id](t), SC.f);
+    dampPose(target, dt, 4.5);
+    mode = SIM_MODE[modeId] || 'still';
+    stepSim(dt, mode, t);
+    if (cur.trick > 0.01) {
+      S.trickClock += dt;
+      if (S.trickClock > 2.6) { S.trickClock -= 2.6; if (S.trick === 'spin') S.trickYawBase += Math.PI; }
+      tr = trickState(S.trick, S.trickClock / 2.6);
+      S.trickYawS = S.trickYawBase + tr.yaw;
+    }
+  } else {
+    dampPose(POSES.juego(t), dt, 4.5);
+    cur.rider = cur.boots = 1; cur.slope = 0; cur.sim = 0; cur.trick = 0; cur.explode = 0; cur.arrow = 0; cur.edges = 0; cur.glow = 1;
+    riderOpt = game.update(dt, t);
+  }
+  const sim = S.sim, sw = cur.sim, tw = cur.trick;
+
+  // Acciones de los puntos en las fijaciones y la tabla
+  const inFij = focusSec === 'fijaciones';
+  S.lift = damp(S.lift, inFij && S.focus === 'disco' ? 1 : 0, 5, dt);
+  S.straps = damp(S.straps, inFij && S.focus === 'straps' ? 1 : 0, 5, dt);
+  S.hbFold = inFij && S.focus === 'highback' ? Math.sin((t - S.focusT) * 2.2) * 0.5 + 0.5 : damp(S.hbFold, 0, 5, dt);
+  for (const b of [W.bindL, W.bindR]) {
+    const p = parts(b), k = b === bF() ? 1 : 0;
+    b.position.y = BOARD.T / 2 + 0.002 + S.lift * 0.16 * k;
+    p.disc.position.y = 0.004 - S.lift * 0.12 * k;
+    p.highback.rotation.x = -0.22 - S.hbFold * 0.45 * k;
+    p.ankle.rotation.x = -S.straps * 1.6 * k;
+    p.toe.rotation.x = S.straps * 1.2 * k;
+    p.boot.visible = cur.boots > 0.02;
+    p.boot.scale.setScalar(Math.max(0.001, cur.boots));
+  }
+  W.mats.boot.opacity = W.mats.bootDark.opacity = W.mats.bootAccent.opacity = clamp(cur.boots * 1.5, 0, 1);
+
+  if (!game.on) {
+    const pitchComp = Math.abs(Math.sin(tr.pitch * tw)) * 0.72;
+    rig.position.set(cur.pos[0] + sim.x * sw, cur.pos[1] + (tr.y + pitchComp) * tw, cur.pos[2]);
+    rig.rotation.set(cur.rot[0] + sim.roll * sw, cur.rot[1] + sim.yaw * sw + S.trickYawS * tw, cur.rot[2] + sim.pitch * sw + tr.pitch * dSign * tw);
+    W.boardGroup.rotation.y = tr.shifty * tw;
+  }
+
+  // Cantos, brillos, flecha
+  const edgeModes = modeId === 'cantos' || modeId === 'hoja' || modeId === 'pedales';
+  const pulse = focusSec === 'tabla' && S.focus === 'cantos' ? 0.6 + 0.4 * Math.sin(t * 6) : 1;
+  W.heelEdge.material.opacity = cur.edges * (edgeModes ? (S.edge === 'back' ? 1 : 0.12) : 1) * pulse;
+  W.toeEdge.material.opacity = cur.edges * (edgeModes ? (S.edge === 'front' ? 1 : 0.12) : 1) * pulse;
+  let pl = S.pL, pr = S.pR;
+  if (modeId === 'postura') pl = pr = 0.5;
+  if (focusSec === 'stance') { pl = S.focus === 'izq' ? 1 : 0; pr = S.focus === 'der' ? 1 : 0; }
+  const gl = focusSec === 'stance' ? 1 : cur.glow;
+  W.glowL.material.opacity = gl * pl * 0.95; W.glowR.material.opacity = gl * pr * 0.95;
+  W.glowL.scale.setScalar(0.7 + pl * 0.6); W.glowR.scale.setScalar(0.7 + pr * 0.6);
+  const arrowPulse = focusSec === 'stance' && S.focus === 'nose' ? 0.75 + 0.25 * Math.sin(t * 6) : 1;
+  W.arrow.material.opacity = cur.arrow * arrowPulse;
   W.arrow.visible = cur.arrow > 0.01;
   W.arrow.position.set(S.dir * 0.92, 0.03, 0.22);
   W.arrow.scale.set(S.dir, 1, 1);
-  W.arrow.material.side = THREE.DoubleSide;
 
   // Rider
   rig.updateMatrixWorld(true);
   const rv = cur.rider;
   W.rider.visible = rv > 0.02;
   if (W.rider.visible) {
-    // El cuerpo se queda más vertical que la tabla en los trucos
     W.rider.rotation.z = -tr.pitch * dSign * tw * 0.6;
     W.rider.position.y = (1 - Math.min(1, rv)) * 1.2;
     W.rider.scale.setScalar(Math.max(0.001, Math.min(1, rv * 1.1)));
     W.rider.updateMatrixWorld(true);
-    W.bindL.userData.parts.aAnkleBone.getWorldPosition(footL); W.rider.worldToLocal(footL);
-    W.bindR.userData.parts.aAnkleBone.getWorldPosition(footR); W.rider.worldToLocal(footR);
-    const d = S.pL - S.pR;
-    const edgeLean = sw * (mode === 'turn' ? sim.roll * 0.35 : (S.edge === 'back' ? -0.07 : 0.07));
-    const lookT = mode === 'turn' ? 0.9 * dSign : mode === 'still' ? 0.85 * dSign : clamp(sim.v * 0.6, -1, 1) * (S.edge === 'back' ? 1 : -1) + 0.3 * dSign;
-    S.look = damp(S.look, lookT, 4, dt);
-    poseRider(W.rider, footL, footR, {
-      crouch: lerp(cur.crouch, tr.crouch, tw) + (G.on ? 0.1 : 0),
-      shiftX: d * 0.11 * sw + tr.shiftX * dSign * tw,
-      shiftZ: edgeLean,
-      lookYaw: S.look,
-      arms: lerp(0.4, tr.arms, tw),
-      twist: 0,
-    });
+    parts(W.bindL).aAnkleBone.getWorldPosition(footL); W.rider.worldToLocal(footL);
+    parts(W.bindR).aAnkleBone.getWorldPosition(footR); W.rider.worldToLocal(footR);
+    let o;
+    if (riderOpt) o = riderOpt;
+    else {
+      const d = S.pL - S.pR;
+      const edgeLean = sw * (mode === 'turn' ? sim.roll * 0.35 : (S.edge === 'back' ? -0.07 : 0.07));
+      let lookT = mode === 'turn' ? 0.9 * dSign : mode === 'still' ? 0.85 * dSign : clamp(sim.v * 0.6, -1, 1) * (S.edge === 'back' ? 1 : -1) + 0.3 * dSign;
+      if (focusSec === 'postura' && S.focus === 'mirada') lookT = dSign * (0.9 + Math.sin(t * 1.5) * 0.3);
+      let crouch = lerp(cur.crouch, tr.crouch, tw);
+      if (focusSec === 'postura' && S.focus === 'rodillas') crouch = 0.45 + Math.sin((t - S.focusT) * 3) * 0.25;
+      S.look = damp(S.look, lookT, 4, dt);
+      o = { crouch, shiftX: d * 0.11 * sw + tr.shiftX * dSign * tw, shiftZ: edgeLean, lookYaw: S.look, arms: lerp(0.4, tr.arms, tw), twist: 0 };
+    }
+    poseRider(W.rider, footL, footR, o);
   }
 
-  // Pista
+  // Pista de prácticas
   const sl = cur.slope;
+  W.slope.visible = sl > 0.01 && !game.on;
   W.groundMat.opacity = sl;
-  W.ground.visible = sl > 0.01;
   for (const m of W.treeMats) m.opacity = sl;
   W.trailMat.opacity = sl * 0.4;
   const speed = sim.speed * sw;
   W.snowMap.offset.y -= speed * dt * (24 / 60);
-  for (const tree of W.trees) {
-    tree.position.z -= speed * dt;
-    if (tree.position.z < -8) tree.position.z += 48;
+  for (const tree of W.trees) { tree.position.z -= speed * dt; if (tree.position.z < -8) tree.position.z += 48; }
+  if (!game.on) {
+    stepTrail(dt, sw > 0.5 && sl > 0.5, speed);
+    W.shadow.material.opacity = sl * 0.85;
+    W.shadow.position.set(rig.position.x, 0.004, rig.position.z);
+    W.shadow.rotation.set(-Math.PI / 2, 0, rig.rotation.y);
+    const sh = 1 - clamp((rig.position.y - GROUND) * 1.2, 0, 0.6);
+    W.shadow.scale.set(sh, sh, 1);
   }
-  stepTrail(dt, sw > 0.5 && sl > 0.5, speed);
-  W.shadow.material.opacity = sl * 0.85;
-  W.shadow.position.set(rig.position.x, 0.004, rig.position.z);
-  W.shadow.rotation.set(-Math.PI / 2, 0, rig.rotation.y);
-  const sh = 1 - clamp((rig.position.y - GROUND) * 1.2, 0, 0.6);
-  W.shadow.scale.set(sh, sh, 1);
 
   // Cielo y luces
-  _c1.copy(studioTop).lerp(slopeTop, sl);
-  _c2.copy(studioBot).lerp(slopeBot, sl);
-  W.skyMat.uniforms.top.value.copy(_c1);
-  W.skyMat.uniforms.bottom.value.copy(_c2);
-  W.skyMat.uniforms.sun.value = sl;
-  W.scene.fog.color.copy(_c2);
-  W.scene.fog.near = lerp(30, 9, sl); W.scene.fog.far = lerp(90, 42, sl);
-  W.hemi.intensity = lerp(0.6, 1.25, sl);
-  W.warm.intensity = lerp(3, 0, sl);
-  W.rim.intensity = lerp(1.5, 0.5, sl);
-  renderer.toneMappingExposure = lerp(1.05, 0.92, sl);
+  const day = game.on ? 1 : sl;
+  W.skyMat.uniforms.top.value.copy(studioTop).lerp(slopeTop, day);
+  W.skyMat.uniforms.bottom.value.copy(studioBot).lerp(slopeBot, day);
+  W.skyMat.uniforms.sun.value = day;
+  W.scene.fog.color.copy(W.skyMat.uniforms.bottom.value);
+  W.scene.fog.near = game.on ? 60 : lerp(30, 9, sl);
+  W.scene.fog.far = game.on ? 650 : lerp(90, 42, sl);
+  W.hemi.intensity = lerp(0.6, 1.25, day);
+  W.warm.intensity = lerp(2.2, 0, day);
+  W.rim.intensity = lerp(1.0, 0.3, day);
+  renderer.toneMappingExposure = lerp(1.05, 0.92, day);
+
+  // Cámara
+  if (!game.on) {
+    const aspect = vw / vh;
+    const zoom = aspect < 1.25 ? 1 + (clamp(1.3 / aspect, 1, 2.9) - 1) * cur.mk : 1;
+    const look = cur.look, cp = cur.cam;
+    camera.position.set(look[0] + (cp[0] - look[0]) * zoom, look[1] + (cp[1] - look[1]) * zoom, look[2] + (cp[2] - look[2]) * zoom);
+    camera.lookAt(look[0], look[1], look[2]);
+    const sheet = document.body.classList.contains('sheet-open');
+    const hero = secId === 'inicio';
+    let ox = 0, oy = 0;
+    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.22 : 0.13);
+    else ox = vw * (sheet ? 0.16 : hero ? -0.2 : -0.05);
+    offX = damp(offX, ox, 5, dt); offY = damp(offY, oy, 5, dt);
+    camera.setViewOffset(vw, vh, offX, offY, vw, vh);
+  } else camera.clearViewOffset();
+  W.sky.position.copy(camera.position);
 
   // Copos
   const fp = W.flakes.geometry.attributes.position, fa = fp.array, fs = W.flakes.userData.speed;
@@ -792,63 +724,31 @@ function frame(now) {
     if (fa[i * 3 + 2] < -9) fa[i * 3 + 2] += 18;
   }
   fp.needsUpdate = true;
-  W.flakes.position.set(cur.look[0], 0, cur.look[2]);
+  if (riderOpt) W.flakes.position.set(riderOpt.flakeAt.x, riderOpt.flakeAt.y - 1, riderOpt.flakeAt.z);
+  else W.flakes.position.set(cur.look[0], 0, cur.look[2]);
 
-  // Cámara (con desplazamiento para dejar sitio a la tarjeta)
-  const sideT = G.on ? 0 : lerp(SC.a % 2 === 0 ? 1 : -1, SC.b % 2 === 0 ? 1 : -1, SC.f);
-  sideS = damp(sideS, sideT, 5, dt);
-  const aspect = vw / vh;
-  let zoom = 1;
-  if (aspect < 1.25) zoom = 1 + (clamp(1.3 / aspect, 1, 2.9) - 1) * cur.mk;
-  const look = cur.look, cp = cur.cam;
-  camera.position.set(look[0] + (cp[0] - look[0]) * zoom, look[1] + (cp[1] - look[1]) * zoom, look[2] + (cp[2] - look[2]) * zoom);
-  camera.lookAt(look[0], look[1], look[2]);
-  // Árboles: se esconden si tapan la vista
-  const cx = camera.position.x, cz = camera.position.z, lx = look[0] - cx, lz = look[2] - cz;
-  const ll = lx * lx + lz * lz || 1;
-  for (const tree of W.trees) {
-    const tx = tree.position.x - cx, tz = tree.position.z - cz;
-    const u = clamp((tx * lx + tz * lz) / ll, 0, 1.15);
-    const dx = tx - lx * u, dz = tz - lz * u;
-    tree.visible = sl > 0.01 && dx * dx + dz * dz > 1.6 * tree.scale.x * tree.scale.x;
-  }
-  if (G.on) camera.clearViewOffset();
-  else if (mobile) camera.setViewOffset(vw, vh, 0, vh * 0.25, vw, vh);
-  else camera.setViewOffset(vw, vh, -vw * 0.19 * sideS, 0, vw, vh);
-
-  // Interfaz de pedales
   for (const m of meters) m.b.style.transform = `scaleX(${(m.side === 'L' ? S.pL : S.pR).toFixed(3)})`;
-  if (modeId === 'pedales' && statusEl) {
+  if (modeId === 'pedales' && !game.on) {
     const d = S.pL - S.pR;
-    const txt = d > 0.25 ? '← Pie izquierdo cargado · vas a la izquierda' : d < -0.25 ? 'Pie derecho cargado · vas a la derecha →' : 'Peso repartido · tabla recta';
+    const txt = d > 0.25 ? '← Pie izquierdo · vas a la izquierda' : d < -0.25 ? 'Pie derecho · vas a la derecha →' : 'Peso repartido · tabla recta';
     if (statusEl.textContent !== txt) statusEl.textContent = txt;
   }
 
   renderer.render(W.scene, camera);
-  updateLabels(vw, vh, mobile);
+  updateHotspots(vw, vh);
   requestAnimationFrame(frame);
 }
 
-requestAnimationFrame((now) => {
-  lastT = now;
-  frame(now);
-  setTimeout(() => $('#loader').classList.add('done'), 250);
-});
+requestAnimationFrame((now) => { lastT = now; frame(now); setTimeout(() => $('#loader').classList.add('done'), 250); });
 
-/* ---------------- Instalar como app ---------------- */
+/* ---------------- Instalar ---------------- */
 let deferredPrompt = null;
-addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  $('#install-btn').hidden = false;
-});
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; $('#install-btn').hidden = false; });
 $('#install-btn').addEventListener('click', async () => {
   if (!deferredPrompt) return;
   deferredPrompt.prompt();
   await deferredPrompt.userChoice.catch(() => {});
-  deferredPrompt = null;
-  $('#install-btn').hidden = true;
+  deferredPrompt = null; $('#install-btn').hidden = true;
 });
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
+window.__snow = { W, S, game, RUN, input };
