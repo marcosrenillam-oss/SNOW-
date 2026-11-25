@@ -52,12 +52,15 @@ const canvas = $('#scene');
 loaderProgress(0.08);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
 renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const LOW = mobileMQ.matches || (navigator.hardwareConcurrency || 8) <= 4;
+const PR_MAX = Math.min(devicePixelRatio, LOW ? 1.5 : 2);
+let PR = PR_MAX;
+renderer.setPixelRatio(PR);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = LOW ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 3000);
 
 try {
@@ -71,6 +74,7 @@ loaderProgress(0.3);
 const W = await buildWorld(renderer);
 loaderProgress(0.85);
 W.scene.environment = W.envStudio;
+if (LOW) { W.key.shadow.mapSize.set(1024, 1024); W.flakes.geometry.setDrawRange(0, 600); }
 W.boardGroup.add(W.layers);
 W.sky.visible = false;
 const scroller = initScroll();
@@ -540,9 +544,9 @@ const gameUI = {
     showBest();
   },
 };
-const game = createGame({ W, camera, S, inL, inR, inJ, store, ui: gameUI, renderer });
+const game = createGame({ W, camera, S, inL, inR, inJ, store, ui: gameUI, renderer, low: LOW });
 function quitGame() { game.stop(); W.shadow.quaternion.identity(); }
-$('#play-btn').addEventListener('click', () => game.start(gameMode));
+$('#play-btn').addEventListener('click', async () => { $('#play-btn').classList.add('loading'); await W.loadOutdoor(); $('#play-btn').classList.remove('loading'); game.start(gameMode); });
 $('#again-btn').addEventListener('click', () => game.start(gameMode));
 $('#quit-btn').addEventListener('click', quitGame);
 $('#game-exit').addEventListener('click', quitGame);
@@ -690,6 +694,7 @@ resize();
 function frame(now) {
   scroller.raf(now);
   const dt = Math.min(0.05, (now - lastT) / 1000);
+  governor((now - lastT) / 1000);
   lastT = now; clock += dt;
   const t = clock;
   readScroll();
@@ -815,7 +820,7 @@ function frame(now) {
   for (const m of W.treeMats) m.opacity = sl;
   W.trailMat.opacity = sl * 0.4;
   const speed = sim.speed * sw;
-  W.snowMap.offset.y -= speed * dt * (24 / 60);
+  if (W.groundMat.map) { W.groundMat.map.offset.y -= speed * dt * 0.4; W.groundMat.normalMap.offset.y = W.groundMat.roughnessMap.offset.y = W.groundMat.map.offset.y; }
   for (const tree of W.trees) { tree.position.z -= speed * dt; if (tree.position.z < -8) tree.position.z += 48; }
   if (!game.on) {
     stepTrail(dt, sw > 0.5 && sl > 0.5, speed);
@@ -828,9 +833,12 @@ function frame(now) {
 
   // Cielo y luces
   const day = game.on ? 1 : sl;
-  W.bgSphere.material.opacity = day;
-  W.bgSphere.visible = day > 0.01;
-  W.scene.environment = day > 0.5 ? W.envMountain : W.envStudio;
+  const outdoor = !!W.envMountain;
+  W.bgSphere.material.opacity = outdoor ? day : 0;
+  W.bgSphere.visible = outdoor && day > 0.01;
+  W.studioSphere.material.opacity = game.on ? 0 : 1 - (outdoor ? day : 0);
+  W.studioSphere.visible = W.studioSphere.material.opacity > 0.01;
+  W.scene.environment = day > 0.5 && outdoor ? W.envMountain : W.envStudio;
   document.body.classList.toggle('day', day > 0.6);
   W.catcher.material.opacity = 0.38 * (1 - sl);
   W.scene.fog.color.set('#dde5ee');
@@ -856,12 +864,13 @@ function frame(now) {
     const sheet = document.body.classList.contains('sheet-open');
     const hero = secId === 'inicio';
     let ox = 0, oy = 0;
-    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.05 : 0.17);
+    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.24 : 0.17);
     else { ox = vw * (sheet ? 0.16 : hero ? -0.12 : -0.1); oy = hero ? 0 : -vh * 0.03; }
     offX = damp(offX, ox, 5, dt); offY = damp(offY, oy, 5, dt);
     camera.setViewOffset(vw, vh, offX, offY, vw, vh);
   } else camera.clearViewOffset();
   W.bgSphere.position.copy(camera.position);
+  W.studioSphere.position.copy(camera.position);
 
   // Copos
   const fp = W.flakes.geometry.attributes.position, fa = fp.array, fs = W.flakes.userData.speed;
@@ -891,6 +900,19 @@ function frame(now) {
 }
 
 requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('done'); html.classList.add('ready'); }, 450); });
+setTimeout(() => W.loadOutdoor(), 900);
+// Regulador: si el dispositivo no llega a ~45 fps, baja la resolución (y la sube si sobra)
+const perf = { n: 0, t: 0 };
+function governor(dt) {
+  perf.n++; perf.t += dt;
+  if (perf.t < 1.5) return;
+  const fps = perf.n / perf.t; perf.n = 0; perf.t = 0;
+  if (document.hidden) return;
+  let next = PR;
+  if (fps < 44 && PR > 0.85) next = Math.max(0.75, PR - 0.25);
+  else if (fps > 58 && PR < PR_MAX) next = Math.min(PR_MAX, PR + 0.25);
+  if (next !== PR) { PR = next; renderer.setPixelRatio(PR); renderer.setSize(vw, vh, false); }
+}
 
 /* ---------------- Instalar ---------------- */
 let deferredPrompt = null;

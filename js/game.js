@@ -107,7 +107,7 @@ function pineGeometry(seed) {
   return geo;
 }
 
-function buildMountain(W, renderer) {
+function buildMountain(W, renderer, low) {
   const group = new THREE.Group();
   const r = rnd(42);
   const LEN = RUN + 260, WID = 280;
@@ -135,9 +135,9 @@ function buildMountain(W, renderer) {
   group.add(terrain);
 
   // Pinos
-  const N = 820;
+  const N = low ? 440 : 820;
   const pineMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
-  const inst = [pineGeometry(7), pineGeometry(19)].map((g) => { const m = new THREE.InstancedMesh(g, pineMat, N); m.castShadow = true; m.receiveShadow = true; group.add(m); return m; });
+  const inst = [pineGeometry(7), pineGeometry(19)].map((g) => { const m = new THREE.InstancedMesh(g, pineMat, N); m.castShadow = !low; m.receiveShadow = true; group.add(m); return m; });
   const hide = new THREE.Matrix4().makeScale(0, 0, 0);
   const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
@@ -272,7 +272,7 @@ function buildMountain(W, renderer) {
 const SPIN_PTS = { 0: 0, 180: 200, 360: 500, 540: 900, 720: 1400, 900: 2000, 1080: 2800 };
 
 export function createGame(ctx) {
-  const { W, camera, S, inL, inR, inJ, store, ui, renderer } = ctx;
+  const { W, camera, S, inL, inR, inJ, store, ui, renderer, low } = ctx;
   let M = null;
   const R = {
     on: false, mode: 'libre', x: 0, y: 0, z: 0, h: 0, v: 0, vy: 0, roll: 0, hc: 0, pL: 0, pR: 0,
@@ -287,7 +287,7 @@ export function createGame(ctx) {
   const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), qFlat = new THREE.Quaternion().setFromAxisAngle(AX, -Math.PI / 2);
   const studioShadow = { left: W.key.shadow.camera.left, right: W.key.shadow.camera.right, top: W.key.shadow.camera.top, bottom: W.key.shadow.camera.bottom, near: W.key.shadow.camera.near, far: W.key.shadow.camera.far };
 
-  function ensure() { if (!M) { M = buildMountain(W, renderer); W.scene.add(M.group); } }
+  function ensure() { if (!M) { M = buildMountain(W, renderer, low); W.scene.add(M.group); } }
 
   function start(mode) {
     ensure();

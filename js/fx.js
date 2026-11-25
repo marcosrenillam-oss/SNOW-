@@ -43,19 +43,7 @@ function ridgePath(seed, base, amp, freq, W = 1600, H = 600) {
   return d + ` L${W} ${H} Z`;
 }
 export function initBackground() {
-  const svg = document.getElementById('bg-ridges');
-  const layers = [
-    { seed: 3, base: 420, amp: 170, freq: 0.0024, fill: 'url(#r1)', k: 0.02 },
-    { seed: 9, base: 500, amp: 150, freq: 0.0032, fill: 'url(#r2)', k: 0.05 },
-    { seed: 17, base: 590, amp: 120, freq: 0.0045, fill: 'url(#r3)', k: 0.09 },
-  ];
-  svg.innerHTML = `<defs>
-    <linearGradient id="r1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2b30"/><stop offset=".55" stop-color="#151518"/><stop offset="1" stop-color="#0d0d0f"/></linearGradient>
-    <linearGradient id="r2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f2024"/><stop offset="1" stop-color="#0b0b0d"/></linearGradient>
-    <linearGradient id="r3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141417"/><stop offset="1" stop-color="#09090a"/></linearGradient>
-    <linearGradient id="snowcap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(242,239,233,.22)"/><stop offset=".2" stop-color="rgba(242,239,233,0)"/></linearGradient>
-  </defs>` + layers.map((l, i) => `<g class="rl" data-k="${l.k}"><path d="${ridgePath(l.seed, l.base, l.amp, l.freq)}" fill="${l.fill}"/>${i === 0 ? `<path d="${ridgePath(l.seed, l.base, l.amp, l.freq)}" fill="url(#snowcap)"/>` : ''}</g>`).join('');
-  const groups = [...svg.querySelectorAll('.rl')];
+  const groups = [];
   const word = document.getElementById('bg-word');
   let mx = 0, my = 0, tx = 0, ty = 0;
   addEventListener('pointermove', (e) => { tx = e.clientX / innerWidth - 0.5; ty = e.clientY / innerHeight - 0.5; }, { passive: true });

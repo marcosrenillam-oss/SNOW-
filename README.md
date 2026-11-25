@@ -32,5 +32,10 @@ Es una web estática: se puede publicar tal cual en GitHub Pages, Vercel o Netli
 
 ## Recursos
 - Texturas de las tablas: sacadas de tus fotos (`tools/textures/` regenera).
-- Cielos HDRI y nieve PBR: [Poly Haven](https://polyhaven.com) (CC0) — `horn-koppe_snow`, `studio_small_09`, `snow_02`.
+- Fondos, nieve y tejido: [Poly Haven](https://polyhaven.com) (CC0) — `horn-koppe_snow`, `stierberg_sunrise`, `snow_02`, `bi_stretch`.
 - Scroll suave: [Lenis](https://github.com/darkroomengineering/lenis) (MIT).
+
+## Rendimiento
+- Arranque ligero (tablas + fondo de estudio, ~0,5 MB); cielo, nieve y tejidos se cargan después.
+- Calidad adaptativa: baja la resolución si el móvil no llega a ~45 fps y la sube si sobra.
+- En móvil: sombras más ligeras, menos copos y pinos, sin desenfoques caros.
