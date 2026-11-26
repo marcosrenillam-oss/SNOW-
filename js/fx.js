@@ -102,7 +102,7 @@ export function initCursor() {
       if (f.life <= 0) { flakes.splice(i, 1); continue; }
       g.globalAlpha = Math.min(1, f.life * 1.4) * 0.9;
       g.beginPath(); g.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-      g.fillStyle = '#fff'; g.fill();
+      g.fillStyle = '#fff'; g.fill(); g.strokeStyle = 'rgba(60, 92, 140, .45)'; g.lineWidth = 1; g.stroke();
     }
     g.globalAlpha = 1;
     cx += (px - cx) * 0.22; cy += (py - cy) * 0.22;

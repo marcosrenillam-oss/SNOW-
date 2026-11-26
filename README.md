@@ -14,7 +14,8 @@ Tablas: la blanca del oso (Drake, fijaciones negras) y la negra de la serpiente 
 5. **Método de los pedales** · 6. Front y back · 7. Hoja muerta · 8. Tu primer giro · 9. Trucos
 10. Consejos · 11. Instalar
 
-El juego (**La bajada**, pista roja de 900 m con snowpark) vive aparte en `juego.html` (`js/play.js`).
+El juego (**La montaña**, mundo abierto con 4 pistas, bosque, pueblo y snowpark) vive aparte en `juego.html` (`js/play.js`).
+La web y el juego comparten la misma montaña (`js/mountain.js`): el fondo de la clase es un mirador en la pista azul.
 
 ## Probar en local
 ```bash
@@ -25,16 +26,17 @@ y abrir http://localhost:8080
 ## Dónde editar
 - Textos de cada paso: `index.html`
 - Trucos y consejos: `js/content.js`
-- Escena 3D (tabla, fijaciones, rider, pista): `js/world.js`
+- Escena 3D (tabla, fijaciones, maniquí, pista de prácticas): `js/world.js`
+- Montaña compartida (terreno, pistas, bosque, telesillas, pueblo, cielo): `js/mountain.js`
 - Cámara por paso, puntos interactivos, pedales, giros: `js/main.js`
-- Montaña y física de la bajada: `js/game.js`
+- Juego de mundo abierto (física, snowpark, árboles, minimapa): `js/game.js`
 - Estilos: `styles.css`
 
 Es una web estática: se puede publicar tal cual en GitHub Pages, Vercel o Netlify (necesita HTTPS para instalarse como app).
 
 ## Recursos
 - Texturas de las tablas: sacadas de tus fotos (`tools/textures/` regenera).
-- Fondos, nieve y tejido: [Poly Haven](https://polyhaven.com) (CC0) — `horn-koppe_snow`, `stierberg_sunrise`, `snow_02`, `bi_stretch`.
+- Nieve y tejido: [Poly Haven](https://polyhaven.com) (CC0) — `snow_02`, `bi_stretch`. La montaña y el cielo se generan por código.
 - Scroll suave: [Lenis](https://github.com/darkroomengineering/lenis) (MIT).
 
 ## Rendimiento

@@ -5,6 +5,7 @@ import { TRICKS, TIPS } from './content.js';
 const RUN = 900;
 import { initScroll, splitInto, loaderProgress, initBackground, initCursor } from './fx.js';
 import { buildBackdrop } from './backdrop.js';
+import { createMountain } from './mountain.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -79,7 +80,16 @@ if (LOW) W.key.shadow.mapSize.set(1024, 1024);
 W.flakes.visible = false;
 W.catcher.visible = false;
 const BD = buildBackdrop(W.scene, { low: LOW });
-W.hemi.color.set(0xb9c7e0); W.hemi.groundColor.set(0x2a2d36);
+BD.ground.visible = false;
+// La misma montaña del juego, de fondo: cielo vivo, bosques, telesillas y gente bajando
+const TERR = [60, -360];   // mirador en la pista azul, a media montaña
+const MT = createMountain(W, { low: LOW, res: LOW ? 201 : 281, detail: LOW ? 0.55 : 0.8, terrace: TERR });
+const MTH = MT.T.heightAt(TERR[0], TERR[1]);
+// la montaña se coloca para que el mirador quede bajo la tabla: cima a la derecha, valle abierto a la izquierda
+MT.world.group.rotation.y = -Math.PI / 2;
+const _mo = new THREE.Vector3(TERR[0], MTH, TERR[1]).applyAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2).negate();
+const MTY = _mo.y - 0.03;
+MT.world.group.position.set(_mo.x, MTY, _mo.z);
 W.boardGroup.add(W.layers);
 W.sky.visible = false;
 const scroller = initScroll();
@@ -149,10 +159,10 @@ const POSES = {
     if (f === 'cadera') { cam = [2.6, 1.0, 1.4]; look = [0, 0.7, 0]; }
     return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.4 });
   },
-  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.7, -4.7], look: [S.sim.x * 0.5, 0.5, 1.0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
+  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.7, -4.7], look: [S.sim.x * 0.5, 0.85, 1.0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
   cantos: () => pose({ cam: [3.4, 1.15, -1.7], look: [0, 0.6, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.4 }),
-  hoja: () => pose({ cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.35, 1.3], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
-  giro: () => pose({ cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.2, 1.7], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7 }),
+  hoja: () => pose({ cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.8, 1.3], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
+  giro: () => pose({ cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.85, 1.7], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7 }),
   trucos: () => pose({ cam: [3.5, 1.7, -3.5], look: [0, 0.8, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5 }),
   juego: () => pose({ cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1 }),
   consejos: (t) => pose({ cam: [0, 0.2, 3.9], look: [0, 0, 0], pos: [0, Math.sin(t) * 0.04, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
@@ -776,7 +786,7 @@ function frame(now) {
   for (const m of W.treeMats) m.opacity = sl;
   W.trailMat.opacity = sl * 0.4;
   const speed = sim.speed * sw;
-  if (W.groundMat.map) { W.groundMat.map.offset.y -= speed * dt * 0.4; W.groundMat.normalMap.offset.y = W.groundMat.roughnessMap.offset.y = W.groundMat.map.offset.y; }
+  if (W.groundMat.normalMap) { W.groundMat.normalMap.offset.y -= speed * dt * 0.4; W.groundMat.roughnessMap.offset.y = W.groundMat.normalMap.offset.y; }
   for (const tree of W.trees) { tree.position.z -= speed * dt; if (tree.position.z < -8) tree.position.z += 48; }
   if (!game.on) {
     stepTrail(dt, sw > 0.5 && sl > 0.5, speed);
@@ -787,25 +797,14 @@ function frame(now) {
     W.shadow.scale.set(sh, sh, 1);
   }
 
-  // Cielo y luces
-  const day = game.on ? 1 : sl;
-  const outdoor = !!W.envMountain;
-  W.bgSphere.visible = false;
-  W.studioSphere.material.opacity = 1; W.studioSphere.visible = true;
-  W.scene.environment = outdoor ? W.envMountain : W.envStudio;
+  // Montaña: en los pasos de solo tabla la nieve baja y la tabla flota encima; con el rider sube a sus pies
+  const outdoor = true;
+  MT.world.group.position.y = MTY - (1 - sl) * 0.85;
+  W.scene.environment = W.envStudio;
   document.body.classList.add('day');
-  // el panorama gira con la cámara de cada paso para que los picos queden siempre detrás
-  { const yaw = Math.atan2(cur.cam[0] - cur.look[0], cur.cam[2] - cur.look[2]); skyYaw += wrapAngle(yaw - skyYaw) * (1 - Math.exp(-2 * dt)); W.studioSphere.rotation.y = skyYaw + SKY_OFFSET; }
-  W.catcher.material.opacity = 0.38 * (1 - sl);
-  const studioK = game.on ? 0 : 1 - (outdoor ? day : 0);
-  W.scene.fog.color.set('#cfd9e5');
-  W.scene.fog.near = 30; W.scene.fog.far = 220;
-  // sol del panorama: luz principal desde arriba-detrás, como en la foto
-  W.key.position.set(Math.sin(skyYaw + SUN_OFFSET) * 5, 6, Math.cos(skyYaw + SUN_OFFSET) * 5); W.key.target.position.set(0, 0, 0);
-  W.hemi.intensity = 0.9;
-  W.warm.intensity = 0;
-  W.rim.intensity = 0.6;
-  renderer.toneMappingExposure = 0.95;
+  W.catcher.visible = false;
+  MT.sunAt(rig.position.x, 0, rig.position.z, 8);
+  renderer.toneMappingExposure = 1.0;
 
   // Cámara
   if (!game.on) {
@@ -826,12 +825,11 @@ function frame(now) {
     offX = damp(offX, ox, 5, dt); offY = damp(offY, oy, 5, dt);
     camera.setViewOffset(vw, vh, offX, offY, vw, vh);
   } else camera.clearViewOffset();
-  W.bgSphere.position.copy(camera.position);
-  W.studioSphere.position.copy(camera.position);
+  MT.update(t, dt, camera);
 
   // Fondo vivo: cordillera, niebla, nubes y nieve con viento
   {
-    const studioK = 1 - sl;
+    const studioK = 0;
     const c = riderOpt ? riderOpt.flakeAt : _bdC.set(cur.look[0], cur.look[1], cur.look[2]);
     BD.update(t, dt, { studio: studioK, center: c, camera, speedZ: game.on ? 0 : speed, fall: 1 });
   }
@@ -850,7 +848,7 @@ function frame(now) {
 }
 
 requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('done'); html.classList.add('ready'); }, 450); });
-setTimeout(() => W.loadOutdoor(), 900);
+setTimeout(() => W.loadOutdoor().then(() => MT.setSnowNormal(W.snowTextures.snowNm)), 900);
 // Regulador: si el dispositivo no llega a ~45 fps, baja la resolución (y la sube si sobra)
 const perf = { n: 0, t: 0 };
 function governor(dt) {
@@ -874,4 +872,4 @@ $('#install-btn').addEventListener('click', async () => {
   deferredPrompt = null; $('#install-btn').hidden = true;
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__snow = { W, S, game, RUN, input };
+window.__snow = { renderer, W, S, game, RUN, input, MT };

@@ -1,5 +1,6 @@
 // Objetos 3D: tus tablas (texturas sacadas de tus fotos), fijaciones, botas, rider y pista de prácticas.
 import * as THREE from 'three';
+import { buildSky } from './mountain.js';
 import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/jsm/loaders/GLTFLoader.js';
 
@@ -20,7 +21,7 @@ export const THEMES = {
     accent: 0xe5233d, accent2: 0x263049, cool: 0x3b6cff,
     side: '#d62a3e', top: 'assets/drake-top.jpg', base: 'assets/drake-base.jpg',
     binding: { frame: 0x17181c, high: 0x111215, strap: 0x1d1f24, detail: 0x9aa0a8, accent: 0x2c2f36, pad: 0x26282e },
-    rider: { jacket: 0xe5233d, jacketDark: 0x7c0f1d, pants: 0x18191e, stripe: 0xffffff, lens: 0xff7a1a, helmet: 0xf2f3f5 },
+    rider: { jacket: 0xe5233d, pants: 0x263049, joint: 0xffffff, lens: 0xff7a1a, helmet: 0xf2f3f5 },
     studio: ['#07080b', '#25272f'], css: { accent: '#e5233d', accent2: '#ff3d55', deep: '#263049', bg: '#0b0c10' },
   },
   snake: {
@@ -28,7 +29,7 @@ export const THEMES = {
     accent: 0xff6a1a, accent2: 0x1a1c22, cool: 0x3b6cff,
     side: '#2f55d8', top: 'assets/snake-top.jpg', base: 'assets/snake-base.jpg',
     binding: { frame: 0xff6a1a, high: 0xff6a1a, strap: 0xff7d33, detail: 0x1b1c20, accent: 0xff5a10, pad: 0xe8601a },
-    rider: { jacket: 0x16171b, jacketDark: 0x2a2c33, pants: 0x2b2e36, stripe: 0xff6a1a, lens: 0x3b6cff, helmet: 0x1b1c20 },
+    rider: { jacket: 0xff6a1a, pants: 0x1b1d22, joint: 0xf2f3f5, lens: 0x3b6cff, helmet: 0x1b1d22 },
     studio: ['#060607', '#1e1c1b'], css: { accent: '#ff6a1a', accent2: '#ff8c45', deep: '#16181d', bg: '#09090a' },
   },
 };
@@ -459,92 +460,56 @@ export function applyFabric(rider, nor, rough) {
 }
 
 function makeRider() {
+  // Maniquí de clase: piezas lisas y mate, articulaciones marcadas para que la postura se lea de un vistazo
+  const std = (color, rough = 0.62) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0 });
   const M = {
-    jacket: fabricMat(0xd8213a, 7),
-    jacketDark: fabricMat(0x6e0e1a, 7),
-    pants: fabricMat(0x18191d, 6),
-    knit: fabricMat(0x15161a, 12, { roughness: 0.95 }),
-    glove: fabricMat(0x121316, 5, { roughness: 0.7 }),
-    stripe: new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.4, clearcoat: 0.3 }),
-    helmet: new THREE.MeshPhysicalMaterial({ color: 0xf2f3f5, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.12 }),
-    black: new THREE.MeshPhysicalMaterial({ color: 0x0e0f12, roughness: 0.5, clearcoat: 0.4 }),
-    zip: new THREE.MeshStandardMaterial({ color: 0x2a2c31, roughness: 0.3, metalness: 0.6 }),
-    lens: new THREE.MeshPhysicalMaterial({ color: 0xff8a2a, metalness: 0.95, roughness: 0.04, iridescence: 1, iridescenceIOR: 1.7, iridescenceThicknessRange: [200, 600], clearcoat: 1, side: THREE.DoubleSide, envMapIntensity: 1.6 }),
+    jacket: std(0xe5233d), pants: std(0x263049), joint: std(0xffffff, 0.45), hand: std(0x1b1d23),
+    helmet: new THREE.MeshPhysicalMaterial({ color: 0xf2f3f5, roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.3 }),
+    black: std(0x111317, 0.5),
+    lens: new THREE.MeshPhysicalMaterial({ color: 0xff8a2a, metalness: 0.9, roughness: 0.08, clearcoat: 1, side: THREE.DoubleSide, envMapIntensity: 1.4 }),
   };
   const g = new THREE.Group();
   const P = {};
-  // Piernas: pantalón ancho que se amontona sobre la bota
-  P.thighL = clothMesh(clothGeo(LEN.THIGH, 0.096, 0.088, { bulge: 0.1, folds: 4, foldAmp: 0.025 }), M.pants);
-  P.thighR = clothMesh(P.thighL.geometry, M.pants);
-  P.shinL = clothMesh(clothGeo(LEN.SHIN, 0.09, 0.098, { bulge: 0.04, folds: 5, foldAmp: 0.02, stack: 0.45, stackAmp: 0.09 }), M.pants);
-  P.shinR = clothMesh(P.shinL.geometry, M.pants);
-  // Brazos: mangas acolchadas
-  P.upperL = clothMesh(clothGeo(LEN.UPPER, 0.072, 0.066, { bulge: 0.12, folds: 3, foldAmp: 0.04 }), M.jacket);
-  P.upperR = clothMesh(P.upperL.geometry, M.jacket);
-  P.foreL = clothMesh(clothGeo(LEN.FORE, 0.066, 0.06, { bulge: 0.06, folds: 5, foldAmp: 0.05 }), M.jacket);
-  P.foreR = clothMesh(P.foreL.geometry, M.jacket);
+  const limb = (len, r0, r1, m) => clothMesh(clothGeo(len, r0, r1, { bulge: 0.05, folds: 0, foldAmp: 0, seg: 22 }), m);
+  P.thighL = limb(LEN.THIGH, 0.082, 0.064, M.pants); P.thighR = clothMesh(P.thighL.geometry, M.pants);
+  P.shinL = limb(LEN.SHIN, 0.062, 0.05, M.pants); P.shinR = clothMesh(P.shinL.geometry, M.pants);
+  P.upperL = limb(LEN.UPPER, 0.056, 0.046, M.jacket); P.upperR = clothMesh(P.upperL.geometry, M.jacket);
+  P.foreL = limb(LEN.FORE, 0.046, 0.038, M.jacket); P.foreR = clothMesh(P.foreL.geometry, M.jacket);
   for (const k in P) g.add(P[k]);
-  const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const s = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 16), m); s.scale.set(sx, sy, sz); s.castShadow = true; g.add(s); return s; };
-  P.kneeL = ball(0.09, M.pants); P.kneeR = ball(0.09, M.pants);
-  P.hipL = ball(0.098, M.pants); P.hipR = ball(0.098, M.pants);
-  P.elbowL = ball(0.066, M.jacket); P.elbowR = ball(0.066, M.jacket);
-  P.shL = ball(0.085, M.jacket); P.shR = ball(0.085, M.jacket);
-  P.pelvis = ball(0.15, M.pants, 1.2, 0.8, 0.95);
-  // Puños y manoplas con pulgar
-  const cuff = (m) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.062, 1, 20), m); c.castShadow = true; g.add(c); return c; };
-  P.wristL = cuff(M.jacketDark); P.wristR = cuff(M.jacketDark);
-  const mitten = () => {
-    const h = new THREE.Group();
-    const palm = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.07, 6, 16), M.glove); palm.scale.set(1, 1, 0.72); palm.rotation.x = Math.PI / 2; palm.position.z = 0.04; h.add(palm);
-    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.04, 4, 10), M.glove); thumb.position.set(0.04, 0.0, 0.03); thumb.rotation.z = -0.8; h.add(thumb);
-    const gaunt = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.05, 0.07, 18), M.glove); gaunt.rotation.x = Math.PI / 2; gaunt.position.z = -0.025; h.add(gaunt);
-    h.traverse((o) => { o.castShadow = true; });
-    g.add(h); return h;
-  };
-  P.handL = mitten(); P.handR = mitten();
+  const ballGeo = new THREE.SphereGeometry(1, 22, 14);
+  const ball = (r, m, sx = 1, sy = 1, sz = 1) => { const s = new THREE.Mesh(ballGeo, m); s.scale.set(r * sx, r * sy, r * sz); s.castShadow = true; g.add(s); return s; };
+  // articulaciones en blanco (rodillas, cadera, codos, hombros): son las que se explican en la clase
+  P.kneeL = ball(0.074, M.joint); P.kneeR = ball(0.074, M.joint);
+  P.hipL = ball(0.084, M.joint); P.hipR = ball(0.084, M.joint);
+  P.elbowL = ball(0.052, M.joint); P.elbowR = ball(0.052, M.joint);
+  P.shL = ball(0.066, M.joint); P.shR = ball(0.066, M.joint);
+  P.pelvis = ball(0.135, M.pants, 1.25, 0.78, 0.9);
+  const cuff = () => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1, 14), M.jacket); c.castShadow = true; g.add(c); return c; };
+  P.wristL = cuff(); P.wristR = cuff();
+  const hand = () => { const h = new THREE.Group(); const m = new THREE.Mesh(ballGeo, M.hand); m.scale.set(0.048, 0.036, 0.062); m.position.z = 0.035; m.castShadow = true; h.add(m); g.add(h); return h; };
+  P.handL = hand(); P.handR = hand();
 
-  // Torso: chaqueta larga (tapa la cadera), cuello alto, capucha, cremallera, bolsillos
-  const prof = [];
-  const TP = [[0.0, -0.17], [0.188, -0.17], [0.196, -0.12], [0.186, -0.02], [0.176, 0.08], [0.182, 0.2], [0.196, 0.31], [0.2, 0.37], [0.18, 0.43], [0.13, 0.475], [0.09, 0.49], [0.0, 0.49]];
-  for (const [x, y] of TP) prof.push(new THREE.Vector2(x, y));
-  const torso = new THREE.Group();
-  const bodyGeo = new THREE.LatheGeometry(prof, 40);
+  // Torso liso (pecho ancho, cintura estrecha)
+  const TP = [[0.0, -0.15], [0.15, -0.15], [0.162, -0.08], [0.15, 0.04], [0.156, 0.16], [0.182, 0.3], [0.19, 0.37], [0.17, 0.43], [0.11, 0.475], [0.0, 0.485]];
+  const bodyGeo = new THREE.LatheGeometry(TP.map(([x, y]) => new THREE.Vector2(x, y)), 36);
   const bp = bodyGeo.attributes.position;
-  for (let i = 0; i < bp.count; i++) { // arrugas horizontales suaves
-    const y = bp.getY(i), x = bp.getX(i), z = bp.getZ(i);
-    const k = 1 + 0.012 * Math.sin(y * 48) + 0.008 * Math.sin(Math.atan2(z, x) * 5 + y * 20);
-    bp.setX(i, x * k); bp.setZ(i, z * k * 0.74);
-  }
+  for (let i = 0; i < bp.count; i++) bp.setZ(i, bp.getZ(i) * 0.7);
   bodyGeo.computeVertexNormals();
+  const torso = new THREE.Group();
   const body = new THREE.Mesh(bodyGeo, M.jacket); body.castShadow = true; body.receiveShadow = true; torso.add(body);
-  const hem = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.016, 10, 40), M.jacketDark); hem.rotation.x = Math.PI / 2; hem.scale.set(1, 0.74, 1); hem.position.y = -0.165; torso.add(hem);
-  const zip = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.6, 0.012), M.zip); zip.position.set(0, 0.16, 0.142); torso.add(zip);
-  const placket = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.6, 0.008), M.jacketDark); placket.position.set(0.012, 0.16, 0.138); torso.add(placket);
-  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.199, 0.2, 0.026, 40, 1, true), M.stripe); stripe.scale.set(1, 1, 0.75); stripe.position.y = 0.31; torso.add(stripe);
-  for (const sx of [-1, 1]) {
-    const pocket = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.012, 0.012), M.zip); pocket.position.set(sx * 0.09, 0.02, 0.13); pocket.rotation.set(0, sx * 0.4, sx * 0.35); torso.add(pocket);
-  }
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.105, 0.11, 32, 1, true), M.jacket); collar.material = M.jacket; collar.position.y = 0.53; collar.scale.set(1, 1, 0.9); torso.add(collar);
-  const hoodGeo = new THREE.SphereGeometry(0.13, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  const hood = new THREE.Mesh(hoodGeo, M.jacket); hood.position.set(0, 0.47, -0.09); hood.rotation.x = -0.75; hood.scale.set(1.15, 0.75, 0.85); torso.add(hood);
-  const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.02), M.stripe); logo.position.set(-0.1, 0.27, 0.15); logo.rotation.y = -0.3; torso.add(logo);
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.018, 10, 36), M.joint); belt.rotation.x = Math.PI / 2; belt.scale.set(1, 0.7, 1); belt.position.y = -0.13; torso.add(belt);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.12, 16), M.pants); neck.position.y = 0.52; torso.add(neck);
   torso.traverse((o) => { o.castShadow = true; });
   g.add(torso); P.torso = torso;
 
-  // Cabeza: braga de cuello, casco con visera y ventilación, gafas iridiscentes
+  // Cabeza: casco liso con gafas (sin cara: limpio, sin rasgos)
   const head = new THREE.Group();
-  const gaiter = new THREE.Mesh(clothGeo(0.17, 0.085, 0.098, { bulge: 0.05, folds: 3, foldAmp: 0.05 }), M.knit); gaiter.position.y = -0.15; head.add(gaiter);
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 16), M.knit); face.position.set(0, -0.03, 0.005); face.scale.set(1, 1.05, 1.02); head.add(face);
-  const helmetGeo = new THREE.SphereGeometry(0.126, 40, 24, 0, Math.PI * 2, 0, Math.PI * 0.58);
-  const helmet = new THREE.Mesh(helmetGeo, M.helmet); helmet.scale.set(1, 1.02, 1.14); helmet.position.set(0, 0.008, -0.008); head.add(helmet);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.128, 0.008, 10, 48), M.black); rim.rotation.x = Math.PI / 2; rim.scale.set(1, 1.14, 1); rim.position.y = -0.02; head.add(rim);
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.012, 32, 1, false, -0.9, 1.8), M.helmet); brim.position.set(0, 0.03, 0.03); brim.scale.set(1, 1, 1.12); brim.rotation.x = 0.12; head.add(brim);
-  for (let i = -2; i <= 2; i++) { const vent = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, 0.1), M.black); vent.position.set(i * 0.03, 0.122, -0.02); vent.rotation.z = i * 0.18; head.add(vent); }
-  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.129, 0.013, 10, 48), M.jacket); strap.rotation.x = Math.PI / 2 - 0.05; strap.scale.set(1, 1.13, 1.1); strap.position.y = -0.006; head.add(strap);
+  const skull = new THREE.Mesh(ballGeo, M.helmet); skull.scale.set(0.118, 0.13, 0.13); skull.position.set(0, 0.0, 0); head.add(skull);
   const frameM = M.black.clone(); frameM.side = THREE.DoubleSide;
-  const frame = new THREE.Mesh(new THREE.CylinderGeometry(0.134, 0.13, 0.078, 40, 1, true, -1.2, 2.4), frameM); frame.position.set(0, -0.006, 0.006); head.add(frame);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.138, 0.134, 0.058, 40, 1, true, -1.05, 2.1), M.lens); lens.position.set(0, -0.006, 0.008); head.add(lens);
-  head.traverse((o) => { o.castShadow = true; });
+  const frame = new THREE.Mesh(new THREE.CylinderGeometry(0.124, 0.12, 0.07, 36, 1, true, -1.15, 2.3), frameM); frame.position.set(0, -0.012, 0.004); frame.scale.set(1, 1, 1.1); head.add(frame);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.128, 0.124, 0.052, 36, 1, true, -1.0, 2.0), M.lens); lens.position.set(0, -0.012, 0.006); lens.scale.set(1, 1, 1.1); head.add(lens);
+  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.121, 0.012, 8, 40), M.black); strap.rotation.x = Math.PI / 2; strap.scale.set(1, 1.1, 1); strap.position.y = -0.012; head.add(strap);
+  head.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   g.add(head); P.head = head;
 
   P.aKnee = new THREE.Object3D(); P.aHip = new THREE.Object3D(); P.aShoulder = new THREE.Object3D(); P.aHead = new THREE.Object3D();
@@ -553,34 +518,6 @@ function makeRider() {
   return g;
 }
 
-
-// Avatar estilo animación: sustituye casco y braga por la cabeza modelada en Blender
-export function applyAvatar(rider, gltf) {
-  const P = rider.userData.P, RM = rider.userData.M;
-  const skin = new THREE.MeshPhysicalMaterial({ color: 0xf0b896, roughness: 0.55, sheen: 0.5, sheenColor: new THREE.Color(0xffc9b0), sheenRoughness: 0.6, clearcoat: 0.08 });
-  RM.beanie = fabricMat(0xc81d33, 10, { roughness: 0.95 });
-  const pom = fabricMat(0xf2f2f2, 14, { roughness: 1 });
-  const MAP = {
-    Skin: skin,
-    EyeWhite: new THREE.MeshPhysicalMaterial({ color: 0xf6f6f8, roughness: 0.08, clearcoat: 1 }),
-    Iris: new THREE.MeshPhysicalMaterial({ color: 0x3b6fb0, roughness: 0.1, clearcoat: 1 }),
-    Pupil: new THREE.MeshPhysicalMaterial({ color: 0x050505, roughness: 0.05, clearcoat: 1 }),
-    Glint: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-    Hair: new THREE.MeshPhysicalMaterial({ color: 0x3a2214, roughness: 0.55, sheen: 0.8, sheenColor: new THREE.Color(0x8a5a3a) }),
-    Mouth: new THREE.MeshStandardMaterial({ color: 0x8a2a2c, roughness: 0.5 }),
-    Blush: new THREE.MeshStandardMaterial({ color: 0xf08a80, roughness: 0.7, transparent: true, opacity: 0.55 }),
-    Beanie: RM.beanie, Pompom: pom, GoggleFrame: RM.black, Lens: RM.lens,
-  };
-  for (const ch of [...P.head.children]) if (ch.isMesh) P.head.remove(ch);
-  const head = gltf.scene.clone(true);
-  head.traverse((o) => { if (o.isMesh) { o.material = MAP[o.material.name] || skin; o.castShadow = true; } });
-  head.scale.setScalar(1.32);
-  P.head.add(head);
-  // cuello
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.12, 20), skin);
-  neck.position.y = -0.04; P.head.add(neck);
-  rider.userData.avatar = true;
-}
 
 const _v = {};
 for (const k of ['hip', 'hipL', 'hipR', 'kL', 'kR', 'chest', 'shL', 'shR', 'eL', 'eR', 'hL', 'hR', 'side', 't', 'g', 'w']) _v[k] = new THREE.Vector3();
@@ -614,7 +551,7 @@ export function poseRider(rider, footL, footR, o) {
   P.torso.rotateY(tw);
   P.torso.scale.set(1, tlen / 0.46, 1);
   if (rider.userData.avatar) P.head.position.copy(V.chest).add(V.t.set(0, 0.115, 0.03));
-  else P.head.position.copy(V.chest).add(V.t.set(0, 0.21, 0.015));
+  else P.head.position.copy(V.chest).add(V.t.set(0, 0.2, 0.02));
   P.head.rotation.set(0.05 + (o.grab || 0) * 0.3, o.lookYaw || 0, 0);
 
   V.shL.copy(V.chest).addScaledVector(V.side, 0.2).add(V.t.set(0, -0.05, 0));
@@ -710,24 +647,16 @@ export async function buildWorld(renderer) {
 
   // Carga mínima para arrancar rápido: tablas + fondo de estudio. Lo de exterior se carga después.
   const gl = new GLTFLoader();
-  const [dTop, dBase, sTop, sBase, studioBg, bindGltf, avatarGltf] = await Promise.all([
+  const [dTop, dBase, sTop, sBase, bindGltf] = await Promise.all([
     ...['drake-top', 'drake-base', 'snake-top', 'snake-base'].map((n) => loadTex(`assets/${n}.jpg`, renderer)),
-    loadTex('assets/env/alps-2k.jpg', renderer),
     gl.loadAsync('assets/models/binding.glb').catch(() => null),
-    gl.loadAsync('assets/models/avatar.glb').catch(() => null),
   ]);
+  // Luz y reflejos: el mismo cielo animado de la montaña, horneado una vez
   const pmrem = new THREE.PMREMGenerator(renderer);
-  const envStudio = pmrem.fromEquirectangular(studioBg).texture;   // luz y reflejos del panorama real
-  const sphere = (tex, order, rot) => {
-    tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = -1;
-    const m = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, transparent: true, opacity: 0, depthWrite: false, fog: false, toneMapped: false }));
-    m.renderOrder = order; m.rotation.y = rot; m.visible = false; scene.add(m); return m;
-  };
-  // Fondo realista de estudio: campo nevado a la hora azul, desenfocado
-  const studioSphere = sphere(studioBg, -10, 2.2);
-  studioSphere.material.color.setRGB(1, 1, 1);
-  // Fondo real de pista (se carga después)
-  const bgSphere = sphere(new THREE.Texture(), -9, 0.6);
+  const envScene = new THREE.Scene();
+  const envSky = buildSky(); envSky.scale.setScalar(0.02); envScene.add(envSky);
+  const envGround = new THREE.Mesh(new THREE.CircleGeometry(40, 32), new THREE.MeshBasicMaterial({ color: 0xe9eef5 })); envGround.rotation.x = -Math.PI / 2; envGround.position.y = -2; envScene.add(envGround);
+  const envStudio = pmrem.fromScene(envScene, 0.02, 0.1, 200).texture;
   const pbr = (t, rep) => { const c = t.clone(); c.needsUpdate = true; c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(rep[0], rep[1]); return c; };
   const skins = {
     drake: { top: dTop, base: dBase, side: sideTex(THEMES.drake.side, renderer) },
@@ -785,7 +714,6 @@ export async function buildWorld(renderer) {
   addA('baseSpot', 0.12, 0.02, -0.06);
 
   const rider = makeRider();
-  if (avatarGltf) applyAvatar(rider, avatarGltf);
   rig.add(rider);
 
   const arrowShape = new THREE.Shape();
@@ -855,10 +783,8 @@ export async function buildWorld(renderer) {
     mats.detail.color.setHex(b.detail); mats.accent.color.setHex(b.accent); mats.pad.color.setHex(b.pad);
     mats.bootAccent.color.setHex(th.accent);
     const r = th.rider;
-    RM.jacket.color.setHex(r.jacket); RM.jacketDark.color.setHex(r.jacketDark); RM.pants.color.setHex(r.pants);
-    RM.stripe.color.setHex(r.stripe); RM.lens.color.setHex(r.lens); RM.helmet.color.setHex(r.helmet);
-    if (RM.beanie) RM.beanie.color.setHex(name === 'snake' ? 0xff6a1a : 0xc81d33);
-    rider.userData.strap.material = name === 'snake' ? RM.stripe : RM.jacket;
+    RM.jacket.color.setHex(r.jacket); RM.pants.color.setHex(r.pants); RM.joint.color.setHex(r.joint);
+    RM.lens.color.setHex(r.lens); RM.helmet.color.setHex(r.helmet);
     toeEdge.material.color.setHex(th.accent); glowR.material.color.setHex(th.accent); arrow.material.color.setHex(th.accent);
     warm.color.setHex(th.accent);
     skyMat.uniforms.glow.value.setHex(th.accent);
@@ -870,26 +796,20 @@ export async function buildWorld(renderer) {
   function loadOutdoor() {
     if (outdoorP) return outdoorP;
     outdoorP = Promise.all([
-      loadTex('assets/env/alps-4k.jpg', renderer),
       loadTex('assets/snow/snow_diff.jpg', renderer), loadTex('assets/snow/snow_nor_gl.jpg', renderer), loadTex('assets/snow/snow_rough.jpg', renderer),
       loadTex('assets/fabric/fabric_nor.jpg', renderer), loadTex('assets/fabric/fabric_rough.jpg', renderer),
-    ]).then(([bg, snowD, snowNm, snowR, fN, fR]) => {
+    ]).then(([snowD, snowNm, snowR, fN, fR]) => {
       for (const t of [snowNm, snowR, fN, fR]) t.colorSpace = THREE.NoColorSpace;
-      bg.wrapS = THREE.RepeatWrapping; bg.repeat.x = -1;
-      bgSphere.material.map = bg; bgSphere.material.needsUpdate = true;
-      studioSphere.material.map = bg; studioSphere.material.needsUpdate = true;
-      W.envMountain = pmrem.fromEquirectangular(bg).texture;
       W.snowTextures = { snowD, snowNm, snowR };
-      groundMat.map = pbr(snowD, [24, 24]); groundMat.normalMap = pbr(snowNm, [24, 24]); groundMat.normalScale = new THREE.Vector2(0.9, 0.9);
+      groundMat.normalMap = pbr(snowNm, [24, 24]); groundMat.normalScale = new THREE.Vector2(0.45, 0.45); groundMat.color.set(0xf7f9fc);
       groundMat.roughnessMap = pbr(snowR, [24, 24]); groundMat.needsUpdate = true;
-      applyFabric(rider, fN, fR);
       for (const m of [mats.strap, mats.pad, mats.boot]) { const n = fN.clone(); n.needsUpdate = true; n.wrapS = n.wrapT = THREE.RepeatWrapping; n.repeat.set(6, 6); m.normalMap = n; m.normalScale = new THREE.Vector2(0.6, 0.6); m.needsUpdate = true; }
       return W;
     });
     return outdoorP;
   }
   const W = {
-    scene, sky, skyMat, bgSphere, studioSphere, envStudio, envMountain: null, snowTextures: null, loadOutdoor, layers: buildLayers(mats, renderer), hemi, key, rim, warm, fill, rig, boardGroup, board, bindL, bindR, glowL, glowR,
+    scene, sky, skyMat, envStudio, envMountain: envStudio, snowTextures: null, loadOutdoor, layers: buildLayers(mats, renderer), hemi, key, rim, warm, fill, rig, boardGroup, board, bindL, bindR, glowL, glowR,
     heelEdge, toeEdge, anchors, rider, arrow, slope, ground, groundMat, trees, catcher,
     treeMats: [treeMat, capMat, trunkMat], trail, trailMat, TRAIL, shadow, flakes, mats, ring, setSkin,
   };
