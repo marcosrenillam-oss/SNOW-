@@ -6,10 +6,10 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- Scroll suave ---------- */
 export function initScroll() {
-  if (!fine || reduce) return { scrollTo: (y) => window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' }), raf() {}, stop() {}, start() {} };
+  if (!fine || reduce) return { scrollTo: (y, now) => window.scrollTo({ top: y, behavior: reduce || now ? 'auto' : 'smooth' }), raf() {}, stop() {}, start() {} };
   const lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 0.9, smoothWheel: true });
   return {
-    scrollTo: (y) => lenis.scrollTo(y, { duration: 1.6, easing: (t) => 1 - Math.pow(1 - t, 4) }),
+    scrollTo: (y, now) => lenis.scrollTo(y, now ? { immediate: true, force: true } : { duration: 1.6, easing: (t) => 1 - Math.pow(1 - t, 4) }),
     raf: (t) => lenis.raf(t),
     stop: () => lenis.stop(), start: () => lenis.start(),
   };

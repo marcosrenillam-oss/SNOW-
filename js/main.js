@@ -7,6 +7,8 @@ import { initScroll, splitInto, loaderProgress, initCursor } from './fx.js';
 import { buildBackdrop } from './backdrop.js';
 import { createMountain } from './mountain.js';
 
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+window.scrollTo(0, 0);
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -84,7 +86,7 @@ const BD = buildBackdrop(W.scene, { low: LOW });
 BD.ground.visible = false;
 // La misma montaña del juego, de fondo: cielo vivo, bosques, telesillas y gente bajando
 const TERR = [60, -360];   // mirador en la pista azul, a media montaña
-const MT = createMountain(W, { low: LOW, res: LOW ? 201 : 281, detail: LOW ? 0.55 : 0.8, terrace: TERR, extras: false });
+const MT = createMountain(W, { skyOctaves: LOW ? 3 : 5, low: LOW, res: LOW ? 161 : 281, detail: LOW ? 0.42 : 0.8, terrace: TERR, extras: false });
 const MTH = MT.T.heightAt(TERR[0], TERR[1]);
 // la montaña se coloca para que el mirador quede bajo la tabla: cima a la derecha, valle abierto a la izquierda
 MT.world.group.rotation.y = -Math.PI / 2;
@@ -164,7 +166,7 @@ const POSES = {
     if (f === 'disco') { cam = [x + 0.55, 0.35, 0.7]; look = [x, 0.06, 0]; }
     return pose({ cam, look, rot: [0, f === 'angulos' ? 0 : -0.12 + (p - 0.5) * 0.5 * e, 0], bexp: e, mk: f === 'angulos' ? 1.25 : 0.6 + e * 0.4 });
   },
-  stance: (t) => pose({ cam: [0.3, 3.3, -2.0], look: [0, 0, 0.18], pos: [0, GROUND, 0], slope: 1, arrow: 1, feet: 1, mk: 0.7 }),
+  stance: (t) => pose({ cam: [S.dir * 0.3, 3.3, -2.2], look: [S.dir * 0.3, 0, -0.3], pos: [0, GROUND, 0], slope: 1, arrow: 1, feet: 1, mk: 1.05 }),
   // capítulos con foto: la tabla se va volando y queda la montaña de fondo
   postura: (t) => pose({ cam: [Math.sin(t * 0.12) * 0.4, 1.0, 3.4], look: [0, 1.7, -12], pos: [0, 6, 0], rot: [0.3, t * 0.4, 0.6], mk: 1 }),
   cantos: (t) => pose({ cam: [Math.sin(t * 0.12) * 0.4 - 0.6, 1.1, 3.2], look: [-2, 1.9, -12], pos: [0, 6, 0], rot: [0.3, t * 0.4, 0.6], mk: 1 }),
@@ -314,8 +316,19 @@ function showFull(sec) {
   if (src && fpImg.getAttribute('src') !== src) fpImg.src = src;
 }
 
+const prefetched = new Set();
+function prefetchAround(i) {
+  for (const k of [i, i + 1, i + 2]) {
+    const s = sections[k]; if (!s) continue;
+    const srcs = [];
+    if (s.el.dataset.photo) for (const key in PHOTOS) if (key.split(':')[0] === s.el.dataset.photo) srcs.push(PHOTOS[key].src);
+    if (FULL[s.id]) srcs.push(FULL[s.id]);
+    for (const src of srcs) if (!prefetched.has(src)) { prefetched.add(src); const im = new Image(); im.decoding = 'async'; im.src = src; im.decode?.().catch(() => {}); }
+  }
+}
 function setHud(i) {
   if (i === hudSection) return;
+  prefetchAround(i);
   closeSheet();
   if (hudSection >= 0) { const old = sections[hudSection]; if (old.dock) old.el.appendChild(old.dock); }
   hudSection = i;
@@ -484,7 +497,7 @@ angFront.addEventListener('input', () => { setAngles(+angFront.value, S.angB); $
 angBack.addEventListener('input', () => { setAngles(S.angF, +angBack.value); $$('[data-preset]').forEach((x) => x.classList.remove('on')); });
 segGroup('[data-preset]', 'preset', (v) => { const [f, b] = v.split(',').map(Number); setAngles(f, b); });
 
-function setStance(st) { if (S.stance !== st) spin.vy += 11; S.stance = st; store.set('stance', st); $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st)); }
+function setStance(st) { S.stance = st; store.set('stance', st); $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st)); }
 segGroup('[data-stance]', 'stance', setStance);
 setStance(S.stance);
 
@@ -703,7 +716,9 @@ addEventListener('orientationchange', () => setTimeout(resize, 200));
 new ResizeObserver(measure).observe($('main'));
 resize();
 
+const PERF = /[?&]perf/.test(location.search) ? (window.__perf = { js: 0, all: 0, n: 0 }) : null;
 function frame(now) {
+  const f0 = PERF ? performance.now() : 0;
   scroller.raf(now);
   const dt = Math.min(0.05, (now - lastT) / 1000);
   governor((now - lastT) / 1000);
@@ -882,7 +897,7 @@ function frame(now) {
     const sheet = document.body.classList.contains('sheet-open');
     const hero = secId === 'inicio', P0 = sections[SC.active].el.dataset.pos || 'left';
     let ox = 0, oy = 0;
-    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.3 : 0.16);
+    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.3 : cur.slope > 0.5 ? 0.09 : 0.16);
     else if (sheet) ox = vw * 0.16;
     else if (hero || P0 === 'left') ox = -vw * (cur.rider > 0.5 ? 0.17 : 0.13);
     else if (P0 === 'right') ox = vw * (cur.rider > 0.5 ? 0.17 : 0.13);
@@ -905,12 +920,22 @@ function frame(now) {
     if (statusEl.textContent !== txt) statusEl.textContent = txt;
   }
 
+  const f1 = PERF ? performance.now() : 0;
   renderer.render(W.scene, camera);
+  if (PERF) { PERF.js += f1 - f0; PERF.n++; }
   updateHotspots(vw, vh);
   updateSpecs(vw, vh, focusSec);
   requestAnimationFrame(frame);
 }
 
+function warmUp() {
+  const vis = [W.layers, W.slope, W.arrow, W.heelEdge, W.toeEdge, feet.L, feet.R, W.glowL, W.glowR, W.trail];
+  const was = vis.map((o) => o.visible);
+  vis.forEach((o) => { o.visible = true; });
+  try { renderer.compile(W.scene, camera); } catch { /* nada */ }
+  vis.forEach((o, k) => { o.visible = was[k]; });
+}
+warmUp();
 requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('ready'); enterBtn.disabled = false; }, 350); });
 const enterBtn = $('#ld-enter');
 function enter() {
@@ -935,7 +960,20 @@ function governor(dt) {
   if (fps < 44 && PR > 0.85) next = Math.max(0.75, PR - 0.25);
   else if (fps > 58 && PR < PR_MAX) next = Math.min(PR_MAX, PR + 0.25);
   if (next !== PR) { PR = next; renderer.setPixelRatio(PR); renderer.setSize(vw, vh, false); }
+  else if (fps < 38 && PR <= 0.85 && !perf.lite && html.classList.contains('ready')) {
+    // ya al mínimo de resolución y sigue lento: fuera sombras suaves y media nieve
+    perf.lite = true;
+    renderer.shadowMap.type = THREE.BasicShadowMap; W.key.shadow.mapSize.set(512, 512); W.key.shadow.map?.dispose(); W.key.shadow.map = null;
+    BD.snow.geometry.setDrawRange(0, Math.floor(BD.snow.geometry.attributes.position.count / 2));
+  }
 }
+
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = performance.now(); return; }
+  if (hiddenAt && performance.now() - hiddenAt > 180000) { closeSheet(); closeMenu(); scroller.scrollTo(0, true); }
+});
+addEventListener('pageshow', (e) => { if (e.persisted) { closeSheet(); closeMenu(); scroller.scrollTo(0, true); } });
 
 /* ---------------- Instalar ---------------- */
 let deferredPrompt = null;

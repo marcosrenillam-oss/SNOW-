@@ -107,16 +107,16 @@ export function buildTerrain({ res = 361, seed = 7, terrace = null } = {}) {
 }
 
 /* ---------- Cielo animado (degradado, sol y nubes suaves en shader) ---------- */
-export function buildSky() {
+export function buildSky(octaves = 5) {
   const mat = new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false, defines: { OCT: octaves },
     uniforms: { uTime: { value: 0 }, uSun: { value: SUN.clone() }, uTop: { value: new THREE.Color('#3f7fd6') }, uHor: { value: new THREE.Color('#eceef1') }, uWarm: { value: new THREE.Color('#ffbf8a') } },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `
       uniform float uTime; uniform vec3 uSun, uTop, uHor, uWarm; varying vec3 vDir;
       float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++){ s += n(p) * a; p *= 2.07; a *= 0.5; } return s; }
+      float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < OCT; i++){ s += n(p) * a; p *= 2.07; a *= 0.5; } return s; }
       void main(){
         vec3 d = normalize(vDir);
         float y = clamp(d.y, -0.2, 1.0);
@@ -365,9 +365,9 @@ export function buildRange() {
 }
 
 /* ---------- Todo junto: cielo, cordillera, montaña, luz y bruma ---------- */
-export function createMountain(W, { low = false, res, treeShadow = false, detail = 1, terrace = null, extras = true } = {}) {
+export function createMountain(W, { skyOctaves = 5, low = false, res, treeShadow = false, detail = 1, terrace = null, extras = true } = {}) {
   const T = buildTerrain({ res: res || (low ? 201 : 321), terrace });
-  const sky = buildSky(), range = buildRange();
+  const sky = buildSky(skyOctaves), range = buildRange();
   const world = buildMountainWorld(T, { low, detail, treeShadow, extras });
   W.scene.add(sky, range, world.group);
   W.scene.background = null;

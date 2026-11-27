@@ -713,3 +713,5 @@ body.sheet-open #photo[data-side="right"] { transform: translate(calc(-84vw + 44
   .stance-pick button { min-width: 0; flex: 1; padding: 12px 14px; }
   .stance-pick b { font-size: 20px; }
 }
+/* móvil: letras sin desenfoque (más ligero) */
+@media (max-width: 820px), (pointer: coarse) { #hud.swap .split .c { filter: none; } .split .c { transition-property: opacity, transform; } #hud.swap, .subtitle.swap { filter: none; } }
