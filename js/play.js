@@ -13,7 +13,7 @@ const store = {
 };
 const html = document.documentElement;
 const LOW = matchMedia('(max-width: 820px)').matches || (navigator.hardwareConcurrency || 8) <= 4;
-const S = { dir: store.get('stance', 'regular') === 'goofy' ? -1 : 1, pL: 0, pR: 0, skin: store.get('skin', 'drake') };
+const S = { dir: store.get('stance', 'regular') === 'goofy' ? -1 : 1, pL: 0, pR: 0, skin: 'drake' };
 
 loaderProgress(0.1);
 const canvas = $('#scene');
@@ -46,7 +46,6 @@ function setSkin(sk) {
   S.skin = sk; store.set('skin', sk); W.setSkin(sk); html.dataset.board = sk;
   $$('[data-skin]').forEach((b) => b.classList.toggle('on', b.dataset.skin === sk));
 }
-$$('[data-skin]').forEach((b) => b.addEventListener('click', () => setSkin(b.dataset.skin)));
 setSkin(S.skin);
 
 /* ---------- Entrada ---------- */

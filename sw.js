@@ -1,5 +1,5 @@
 // Service worker: la app funciona sin cobertura en la estación.
-const CACHE = 'snowprofe-v8';
+const CACHE = 'snowprofe-v9';
 const SHELL = [
   './',
   './index.html',

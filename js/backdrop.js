@@ -40,7 +40,7 @@ export function buildBackdrop(scene, { low = false } = {}) {
   const clouds = [], mist = [], mountMat = { opacity: 1 }, mountains = null;
 
   // ---- Nieve en GPU (con viento y rastro del cursor) ----
-  const COUNT = low ? 1800 : 4200, BOX = new THREE.Vector3(24, 14, 24);
+  const COUNT = low ? 900 : 3000, BOX = new THREE.Vector3(24, 14, 24);
   const p = new Float32Array(COUNT * 3), sz = new Float32Array(COUNT), ph = new Float32Array(COUNT);
   for (let i = 0; i < COUNT; i++) {
     p[i * 3] = Math.random() * BOX.x; p[i * 3 + 1] = Math.random() * BOX.y; p[i * 3 + 2] = Math.random() * BOX.z;

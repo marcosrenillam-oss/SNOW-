@@ -6,7 +6,7 @@
   <title>SNOW·PROFE — Aprende snowboard</title>
   <meta name="description" content="Aprende snowboard paso a paso con tu tabla en 3D: fijaciones, regular o goofy, el método de los pedales, cantos, giros, trucos y una montaña abierta para bajar por donde quieras.">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#eef2f7">
+  <meta name="theme-color" content="#f5f2ec">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,72 +17,61 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Marcellus+SC&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 </head>
 <body class="hero-mode">
-  <!-- Intro -->
-  <div id="loader" aria-hidden="true">
-    <div class="ld-top"><span>Snow·Profe</span><span>Clase de snowboard</span></div>
-    <div class="ld-mid"><span class="ld-word">Encerando<em> la tabla</em></span></div>
-    <div class="ld-bot"><span class="ld-count" id="ld-count">000</span><i class="ld-bar"><b id="ld-bar"></b></i></div>
-  </div>
-
-  <!-- Fondo: foco, crestas en niebla y palabra gigante -->
-  <div id="bg" aria-hidden="true">
-    <div class="bg-spot"></div>
+  <!-- Entrada: nieve, logo y botón para entrar -->
+  <div id="loader">
+    <div class="ld-inner">
+      <p class="ld-logo">Snow<span>·</span>Profe</p>
+      <button class="ld-enter" id="ld-enter" type="button" disabled><i></i><span>Entrar a la montaña</span><i></i></button>
+    </div>
+    <div class="ld-status"><span id="ld-count">0%</span><span>Preparando la nieve</span></div>
+    <p class="ld-note">Clase de snowboard · desde cero</p>
   </div>
 
   <canvas id="scene" aria-hidden="true"></canvas>
-  <div class="bg-word" id="bg-word" aria-hidden="true">Snow</div>
   <canvas id="snowfx" aria-hidden="true"></canvas>
+  <div class="veil" aria-hidden="true"></div>
   <div id="specs" aria-hidden="true"></div>
   <div id="hotspots"></div>
   <div id="flash" aria-hidden="true"></div>
-  <div class="day-scrim" aria-hidden="true"></div>
-  <div id="grain" aria-hidden="true"></div>
   <div id="cursor" aria-hidden="true"><i></i></div>
 
-  <header class="topbar">
-    <a href="#inicio" class="brand" data-goto="inicio">Snow<i>·</i>Profe</a>
-    <div class="top-index" aria-hidden="true"><span id="top-num">00</span><span class="sep"></span><span id="top-title">Inicio</span></div>
-    <button id="menu-btn" class="menu-btn" aria-expanded="false" aria-controls="drawer">
-      <span class="mb-label">Índice</span><span id="menu-count">00/12</span><span class="burger"><i></i><i></i></span>
-    </button>
-    <div class="progress" aria-hidden="true"><i id="progress-bar"></i></div>
+  <header class="ui-top">
+    <div class="ui-left">
+      <a href="#inicio" class="logo-chip" data-goto="inicio" aria-label="Inicio"><span>S</span></a>
+      <button id="menu-btn" class="pill" aria-expanded="false" aria-controls="drawer"><span class="burger"><i></i><i></i></span><span>Índice</span><span class="count" id="menu-count">00/11</span></button>
+    </div>
+    <a class="pill pill-play" href="juego.html"><span class="play-ico"></span><span>Jugar</span></a>
   </header>
 
-  <nav id="dots" class="rail" aria-label="Pasos"></nav>
+  <nav id="dots" class="rail" aria-label="Capítulos"></nav>
 
   <div id="drawer-backdrop"></div>
   <aside id="drawer" aria-hidden="true">
     <div class="drawer-head">
-      <p class="kicker">Índice de la clase</p>
+      <p class="chap"><i class="gem"></i>Índice de la clase</p>
       <button class="icon-btn drawer-close" aria-label="Cerrar">✕</button>
     </div>
     <ol id="drawer-list"></ol>
     <div class="drawer-foot">
-      <a class="btn primary" href="juego.html">Juego · La montaña →</a>
-      <div class="seg board-pick" role="group" aria-label="Elegir tabla">
-        <button data-skin="drake"><i class="sw drake"></i>La blanca · Oso</button>
-        <button data-skin="snake"><i class="sw snake"></i>La negra · Serpiente</button>
-      </div>
+      <a class="know solid" href="juego.html"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Jugar · La montaña</span></a>
     </div>
   </aside>
 
-  <!-- Texto del paso actual -->
-  <div id="hud" aria-live="polite">
-    <p class="kicker" id="hud-kicker"><span id="hud-num">01</span> — <span id="hud-kick">Tu tabla</span></p>
+  <!-- Capítulo actual -->
+  <div id="hud" aria-live="polite" data-pos="left">
+    <p class="chap" id="hud-kicker"><i class="gem"></i><span id="hud-kick">Capítulo 01</span></p>
     <h2 id="hud-title" class="split">Tu tabla</h2>
-    <p class="hud-lead" id="hud-lead"></p>
-    <div class="hud-actions">
-      <span class="hud-hint"><i class="pulse-dot"></i><span id="hud-hint">Toca los puntos</span></span>
-      <button class="link-btn" id="hud-info">Leer más <span>↗</span></button>
-      <button class="icon-btn" id="hud-next" aria-label="Siguiente paso">↓</button>
-    </div>
+    <button class="know" id="hud-info" type="button"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span class="know-label">Saber más</span></button>
     <div class="hud-dock" id="hud-dock"></div>
   </div>
+  <p class="subtitle" id="hud-lead"></p>
+  <p class="hud-hint" id="hud-hint-wrap"><i class="pulse-dot"></i><span id="hud-hint"></span></p>
+  <div class="scroll-cue" aria-hidden="true"><span>Desliza para descubrir</span><i></i></div>
 
   <!-- Panel de información -->
   <div id="sheet" aria-hidden="true">
@@ -101,39 +90,25 @@
     <!-- 00 -->
     <section class="step" id="inicio" data-big="Snow" data-lead="" data-title="Inicio" data-hint="Bienvenido">
       <div class="hero">
-        <p class="kicker">Clase de snowboard <span>—</span> desde cero</p>
-        <h1 class="split-hero"><span class="l">Aprende</span><span class="l"><em>snow</em> como si</span><span class="l">estuviera</span><span class="l"><em>a tu lado.</em></span></h1>
+        <p class="chap"><i class="gem"></i>Clase de snowboard · desde cero</p>
+        <h1 class="split-hero"><span class="l">Aprende snow</span><span class="l">como si estuviera</span><span class="l"><em>a tu lado</em></span></h1>
+        <p class="hero-lead">Doce capítulos con mi tabla, en 3D. Desliza, toca los puntos y arrastra la tabla para girarla.</p>
         <div class="hero-foot">
-          <p class="lead">Desliza. Toca los <span class="inline-dot"></span> puntos. Arrastra la tabla para girarla.</p>
-          <div class="row">
-            <button class="btn primary" data-goto="tabla">Empezar la clase <span>→</span></button>
-            <button class="btn ghost" data-open-menu>Índice</button>
-          </div>
+          <button class="know solid" data-goto="tabla"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Empezar la clase</span></button>
+          <button class="know" data-open-menu><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Índice</span></button>
         </div>
-        <dl class="specs-mini">
-          <div><dt>Tabla</dt><dd>Drake · 155</dd></div>
-          <div><dt>Perfil</dt><dd>Rocker · Twin</dd></div>
-          <div><dt>Pasos</dt><dd>12 + reto</dd></div>
-        </dl>
       </div>
-      <div class="scroll-hint"><span></span>Scroll</div>
       <div class="infos">
         <div class="info" data-info="mitabla" hidden>
           <h3>Esta es mi tabla</h3>
           <p>Una <b>Drake</b> blanca con el oso. Arriba el oso rugiendo, abajo <b>DRAKE</b> en rojo y negro, y fijaciones negras.</p>
-          <p>Con ella vas a aprender toda la clase. Si prefieres la <b>negra de la serpiente</b> con fijaciones naranjas, puedes cambiarla en el paso 01.</p>
+          <p>Con ella vas a aprender toda la clase.</p>
         </div>
       </div>
     </section>
 
     <!-- 01 -->
-    <section class="step" id="tabla" data-big="Anatomía" data-lead="Sigue bajando: tu tabla se abre en sus capas." data-title="Tu tabla" data-hint="Arrástrala para girarla · toca los puntos">
-      <div class="dock">
-        <div class="seg board-pick" role="group" aria-label="Elegir tabla">
-          <button data-skin="drake" class="on"><i class="sw drake"></i>La blanca · Oso</button>
-          <button data-skin="snake"><i class="sw snake"></i>La negra · Serpiente</button>
-        </div>
-      </div>
+    <section class="step" id="tabla" data-pos="left" data-big="Anatomía" data-lead="Sigue bajando: tu tabla se abre en sus capas." data-title="Tu tabla" data-hint="Arrástrala para girarla · toca los puntos">
       <div class="infos">
         <div class="info" data-info="main" hidden>
           <h3>Conoce tu tabla</h3>
@@ -149,7 +124,7 @@
     </section>
 
     <!-- 02 -->
-    <section class="step" id="fijaciones" data-big="Fijaciones" data-lead="Baja despacio y mira cómo se desmonta pieza a pieza." data-title="Fijaciones" data-hint="Toca una parte de la fijación">
+    <section class="step" id="fijaciones" data-pos="left" data-big="Fijaciones" data-lead="Baja despacio y mira cómo se desmonta pieza a pieza." data-title="Fijaciones" data-hint="Toca una parte de la fijación">
       <div class="infos">
         <div class="info" data-info="main" hidden>
           <h3>Las fijaciones</h3>
@@ -173,7 +148,7 @@
     </section>
 
     <!-- 03 -->
-    <section class="step" id="stance" data-big="Goofy" data-lead="¿Qué pie va delante? Haz el test." data-title="¿Regular o goofy?" data-hint="Toca «¿Cuál eres?» y haz el test">
+    <section class="step" id="stance" data-pos="center" data-big="Goofy" data-lead="¿Qué pie va delante? Haz el test." data-title="¿Regular o goofy?" data-hint="Toca «¿Cuál eres?» y haz el test">
       <div class="dock">
         <div class="seg" role="group" aria-label="Postura">
           <button data-stance="regular" class="on">Regular · izq. delante</button>
@@ -198,7 +173,7 @@
     </section>
 
     <!-- 04 -->
-    <section class="step" id="postura" data-big="Postura" data-lead="Rodillas, cadera, hombros y mirada." data-title="Postura base" data-hint="Toca el cuerpo del rider">
+    <section class="step" id="postura" data-pos="right" data-big="Postura" data-lead="Rodillas, cadera, hombros y mirada." data-title="Postura base" data-hint="Toca el cuerpo del rider">
       <div class="dock">
         <div class="seg" role="group" aria-label="Flexión">
           <button data-crouch="0.1">Rígido ✗</button>
@@ -216,7 +191,7 @@
     </section>
 
     <!-- 05 -->
-    <section class="step" id="pedales" data-big="Pedales" data-lead="Aprieta un pie y la tabla va hacia ese lado." data-title="Los pedales" data-hint="Mantén pulsado un pedal">
+    <section class="step" id="pedales" data-pos="left" data-big="Pedales" data-lead="Aprieta un pie y la tabla va hacia ese lado." data-title="Los pedales" data-hint="Mantén pulsado un pedal">
       <div class="dock">
         <div class="pedals" data-pedals>
           <button class="pedal" data-pedal="L"><span>Pie izq.</span><i class="meter"><b></b></i></button>
@@ -241,7 +216,7 @@
     </section>
 
     <!-- 06 -->
-    <section class="step" id="cantos" data-big="Cantos" data-lead="Talones o puntas: siempre vas sobre un canto." data-title="Front y back" data-hint="Toca un canto de la tabla">
+    <section class="step" id="cantos" data-pos="right" data-big="Cantos" data-lead="Talones o puntas: siempre vas sobre un canto." data-title="Front y back" data-hint="Toca un canto de la tabla">
       <div class="dock">
         <div class="seg" role="group" aria-label="Canto">
           <button data-edge="back" class="on">Back · talones</button>
@@ -256,7 +231,7 @@
     </section>
 
     <!-- 07 -->
-    <section class="step" id="hoja" data-big="Hoja" data-lead="De lado a lado, sin girar la tabla." data-title="Hoja muerta" data-hint="Mira cómo baja y toca los puntos">
+    <section class="step" id="hoja" data-pos="left" data-big="Hoja" data-lead="De lado a lado, sin girar la tabla." data-title="Hoja muerta" data-hint="Mira cómo baja y toca los puntos">
       <div class="dock">
         <div class="seg" role="group" aria-label="Canto">
           <button data-edge="back" class="on">De back</button>
@@ -271,7 +246,7 @@
     </section>
 
     <!-- 08 -->
-    <section class="step" id="giro" data-big="Giro" data-lead="Mira, pedal delantero, plana y cambio de canto." data-title="Tu primer giro" data-hint="Toca los 4 puntos en orden">
+    <section class="step" id="giro" data-pos="right" data-big="Giro" data-lead="Mira, pedal delantero, plana y cambio de canto." data-title="Tu primer giro" data-hint="Toca los 4 puntos en orden">
       <div class="dock"><div class="turn-phase" id="turn-phase"><span>●</span><b id="turn-label">Back · talones</b></div></div>
       <div class="infos">
         <div class="info" data-info="main" hidden><h3>Tu primer giro</h3><p>Girar es pasar de un canto al otro. Con los pedales: cargas el <b>pie delantero</b> hasta que la punta mira hacia abajo, pasas por la <b>base plana</b> y cambias de canto.</p></div>
@@ -283,7 +258,7 @@
     </section>
 
     <!-- 09 -->
-    <section class="step" id="trucos" data-big="Trucos" data-lead="Ollie, nollie, press, shifty y 180." data-title="Trucos" data-hint="Elige un truco y toca el punto">
+    <section class="step" id="trucos" data-pos="left" data-big="Trucos" data-lead="Ollie, nollie, press, shifty y 180." data-title="Trucos" data-hint="Elige un truco y toca el punto">
       <div class="dock">
         <div class="seg chips" role="group" aria-label="Trucos">
           <button data-trick="ollie" class="on">Ollie</button>
@@ -301,14 +276,14 @@
 
 
     <!-- 10 -->
-    <section class="step" id="consejos" data-big="Consejos" data-lead="Lo que me enseñaron cuando empecé." data-title="Consejos del profe" data-hint="Toca cada consejo">
+    <section class="step" id="consejos" data-pos="right" data-big="Consejos" data-lead="Lo que me enseñaron cuando empecé." data-title="Consejos del profe" data-hint="Toca cada consejo">
       <div class="infos" id="tips-infos">
         <div class="info" data-info="main" hidden><h3>Consejos del profe</h3><p>Lo que me enseñaron a mí cuando empecé. Toca cada punto alrededor de la tabla.</p></div>
       </div>
     </section>
 
     <!-- 11 -->
-    <section class="step" id="final" data-big="Pista" data-lead="Llévatela en el móvil, también sin cobertura." data-title="¡A la pista!" data-hint="Llévatela en el móvil">
+    <section class="step" id="final" data-pos="center" data-big="Pista" data-lead="Llévatela en el móvil, también sin cobertura." data-title="¡A la pista!" data-hint="Llévatela en el móvil">
       <div class="dock">
         <div class="install" id="install">
           <div class="ios-only"><b>iPhone:</b> toca <span class="ico">⬆︎</span> Compartir → <b>Añadir a pantalla de inicio</b></div>
@@ -316,8 +291,8 @@
           <button class="btn primary" id="install-btn" hidden>Instalar la app</button>
         </div>
         <div class="row">
-          <button class="btn ghost" data-goto="inicio">Volver a empezar</button>
-          <a class="btn primary" href="juego.html">¿Quieres probar? Bajar la montaña →</a>
+          <a class="know solid" href="juego.html"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Jugar · La montaña</span></a>
+          <button class="know" data-goto="inicio"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Volver a empezar</span></button>
         </div>
       </div>
       <div class="infos">

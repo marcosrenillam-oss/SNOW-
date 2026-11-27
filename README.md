@@ -7,7 +7,7 @@ Se puede instalar en la pantalla de inicio del móvil como app (pantalla complet
 Cada paso ocupa una pantalla. En la tabla 3D aparecen **puntos rojos**: al tocarlos la escena reacciona
 (la tabla se da la vuelta, la fijación se levanta, el rider flexiona…) y se abre la explicación.
 
-Tablas: la blanca del oso (Drake, fijaciones negras) y la negra de la serpiente (fijaciones naranjas).
+Tabla: la blanca del oso (Drake, fijaciones negras).
 
 ## Pasos de la clase
 0. Inicio · 1. Tu tabla · 2. Fijaciones · 3. ¿Regular o goofy? (test) · 4. Postura base

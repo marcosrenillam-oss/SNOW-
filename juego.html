@@ -6,14 +6,14 @@
   <title>La montaña — SNOW·PROFE</title>
   <meta name="description" content="Una montaña abierta con cuatro pistas, bosque y snowpark. Bájala con tu tabla y solo los pedales.">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#eef2f7">
+  <meta name="theme-color" content="#f5f2ec">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Marcellus+SC&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
 </head>
@@ -33,7 +33,7 @@
     <div class="start-card">
       <p class="kicker">Mundo abierto <span>—</span> 4 pistas · bosque · snowpark</p>
       <h1>La montaña</h1>
-      <p class="lead">Elige tu tabla y dónde empiezas. Baja por las pistas, métete en el bosque o vuela en el snowpark: por donde quieras.</p>
+      <p class="lead">Elige dónde empiezas. Baja por las pistas, métete en el bosque o vuela en el snowpark: por donde quieras.</p>
       <p class="kicker">Empiezas en</p>
       <div class="seg spawn-pick" role="group" aria-label="Salida">
         <button data-spawn="verde"><i class="pd" style="--c:#2fb36b"></i>Verde</button>
@@ -41,11 +41,6 @@
         <button data-spawn="roja"><i class="pd" style="--c:#e5233d"></i>Roja</button>
         <button data-spawn="negra"><i class="pd" style="--c:#16181d"></i>Negra</button>
         <button data-spawn="park"><i class="pd" style="--c:#ffb020"></i>Snowpark</button>
-      </div>
-      <p class="kicker">Tu tabla</p>
-      <div class="seg board-pick" role="group" aria-label="Tabla">
-        <button data-skin="drake"><i class="sw drake"></i>La blanca · Oso</button>
-        <button data-skin="snake"><i class="sw snake"></i>La negra · Serpiente</button>
       </div>
       <button class="btn primary big" id="play-btn">▶ A la nieve</button>
       <ul class="pedal-rules compact">

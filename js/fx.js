@@ -22,9 +22,9 @@ export function splitInto(el, text) {
 
 /* ---------- Intro con contador ---------- */
 export function loaderProgress(p) {
-  const c = document.getElementById('ld-count'), b = document.getElementById('ld-bar');
-  if (c) c.textContent = String(Math.round(p * 100)).padStart(3, '0');
-  if (b) b.style.transform = `scaleX(${p})`;
+  const c = document.getElementById('ld-count');
+  if (c) c.textContent = Math.round(p * 100) + '%';
+  document.documentElement.style.setProperty('--load', p.toFixed(3));
 }
 
 /* ---------- Crestas de montaña (fbm) ---------- */
@@ -90,7 +90,10 @@ export function initCursor() {
     const h = e.target.closest?.('button, a, input, .hot');
     cur.classList.toggle('hover', !!h);
   });
-  let t = 0;
+  let t = 0, awake = false;
+  const wake = () => { if (!awake) { awake = true; requestAnimationFrame(frame); } };
+  addEventListener('pointermove', wake, { passive: true });
+  addEventListener('pointerdown', wake, { passive: true });
   function frame() {
     t += 1;
     g.clearRect(0, 0, W, H);
@@ -107,8 +110,10 @@ export function initCursor() {
     g.globalAlpha = 1;
     cx += (px - cx) * 0.22; cy += (py - cy) * 0.22;
     cur.style.transform = `translate(${cx}px, ${cy}px)`;
+    // sin copos y con el cursor quieto: se duerme hasta el siguiente movimiento
+    if (!flakes.length && Math.abs(px - cx) + Math.abs(py - cy) < 0.3) { awake = false; return; }
     requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  wake();
   return { setDrag: (on) => cur.classList.toggle('drag', on) };
 }

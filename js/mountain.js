@@ -18,7 +18,7 @@ function ridged(x, y, o = 5) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < o;
 
 export const SIZE = 1800, HALF = 900;
 // Sol: delante-arriba de la cámara de la clase, así la tabla queda bien iluminada y el sol brilla en las bajadas
-export const SUN = new THREE.Vector3(0.55, 0.42, 0.72).normalize();
+export const SUN = new THREE.Vector3(0.6, 0.3, 0.74).normalize();
 
 // Pistas: puntos de control (x, z), ancho y color
 export const PISTES = [
@@ -110,7 +110,7 @@ export function buildTerrain({ res = 361, seed = 7, terrace = null } = {}) {
 export function buildSky() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
-    uniforms: { uTime: { value: 0 }, uSun: { value: SUN.clone() }, uTop: { value: new THREE.Color('#5d93d3') }, uHor: { value: new THREE.Color('#eef1f2') }, uWarm: { value: new THREE.Color('#ffd9b3') } },
+    uniforms: { uTime: { value: 0 }, uSun: { value: SUN.clone() }, uTop: { value: new THREE.Color('#3f7fd6') }, uHor: { value: new THREE.Color('#eceef1') }, uWarm: { value: new THREE.Color('#ffbf8a') } },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `
       uniform float uTime; uniform vec3 uSun, uTop, uHor, uWarm; varying vec3 vDir;
@@ -257,7 +257,7 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
   const towerMat = new THREE.MeshStandardMaterial({ color: 0xb9bfc8, metalness: 0.6, roughness: 0.4 });
   const chairMat = new THREE.MeshStandardMaterial({ color: 0x1b1d23, roughness: 0.6 });
   const lifts = [], towerParts = [];
-  const LIFTS = [[[70, 700], [35, 60]], [[60, 40], [120, -700]], [[-260, 690], [-320, -560]]];
+  const LIFTS = [[[70, 700], [35, 60]], [[150, 40], [210, -700]], [[-260, 690], [-320, -560]]];
   for (const [[x0, z0], [x1, z1]] of LIFTS) {
     const tops = [], L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 60);
     for (let i = 0; i <= n; i++) {
@@ -340,7 +340,7 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
 export function buildRange() {
   const seg = 220, rows = 6, R0 = 1500, R1 = 2100;
   const pos = [], col = [], idx = [];
-  const hz = new THREE.Color('#dfe7f0'), snow = new THREE.Color('#f4f7fb'), rockC = new THREE.Color('#8f9db0');
+  const hz = new THREE.Color('#e4e1e3'), snow = new THREE.Color('#f4f7fb'), rockC = new THREE.Color('#8f9db0');
   for (let r = 0; r <= rows; r++) {
     const v = r / rows;
     for (let i = 0; i <= seg; i++) {
@@ -371,9 +371,9 @@ export function createMountain(W, { low = false, res, treeShadow = false, detail
   const world = buildMountainWorld(T, { low, detail, treeShadow });
   W.scene.add(sky, range, world.group);
   W.scene.background = null;
-  W.scene.fog = new THREE.Fog('#dde7f2', 260, 2300);
-  W.hemi.color.set(0xc4d8f6); W.hemi.groundColor.set(0x8ea6c8); W.hemi.intensity = 0.62;
-  W.key.color.set(0xffefd8); W.key.intensity = 2.5;
+  W.scene.fog = new THREE.Fog('#e6e2e2', 260, 2300);
+  W.hemi.color.set(0xb4cdf2); W.hemi.groundColor.set(0x7d97c0); W.hemi.intensity = 0.6;
+  W.key.color.set(0xffdcb0); W.key.intensity = 2.7;
   W.warm.intensity = 0; W.rim.intensity = 0.35; W.fill.intensity = 0.25;
   const setSnowNormal = (tex) => {
     const t = tex.clone(); t.needsUpdate = true; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(SIZE / 6, SIZE / 6);

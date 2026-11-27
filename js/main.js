@@ -3,7 +3,7 @@ import { RoomEnvironment } from '../vendor/RoomEnvironment.js';
 import { buildWorld, poseRider, BOARD, THEMES } from './world.js';
 import { TRICKS, TIPS } from './content.js';
 const RUN = 900;
-import { initScroll, splitInto, loaderProgress, initBackground, initCursor } from './fx.js';
+import { initScroll, splitInto, loaderProgress, initCursor } from './fx.js';
 import { buildBackdrop } from './backdrop.js';
 import { createMountain } from './mountain.js';
 
@@ -38,7 +38,7 @@ const mobileMQ = matchMedia('(max-width: 820px), (orientation: portrait) and (ma
 /* ---------------- Estado ---------------- */
 const S = {
   stance: store.get('stance', 'regular'), dir: 1,
-  skin: store.get('skin', 'drake'),
+  skin: 'drake',
   angF: 15, angB: -6, angFs: 15, angBs: -6,
   edge: 'back', edgeYaw: 0, crouch: 0.55,
   trick: 'ollie', trickClock: 0, trickYawBase: 0, trickYawS: 0,
@@ -52,10 +52,11 @@ S.dir = S.stance === 'goofy' ? -1 : 1;
 /* ---------------- Render ---------------- */
 const canvas = $('#scene');
 loaderProgress(0.08);
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-renderer.setClearColor(0x000000, 0);
+const LOWQ = matchMedia('(max-width: 820px)').matches || (navigator.hardwareConcurrency || 8) <= 4;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOWQ, alpha: false, powerPreference: 'high-performance' });
+renderer.setClearColor(0xdfe7f0, 1);
 const LOW = mobileMQ.matches || (navigator.hardwareConcurrency || 8) <= 4;
-const PR_MAX = Math.min(devicePixelRatio, LOW ? 1.5 : 2);
+const PR_MAX = Math.min(devicePixelRatio, LOW ? 1.35 : 1.75);
 let PR = PR_MAX;
 renderer.setPixelRatio(PR);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -93,7 +94,6 @@ MT.world.group.position.set(_mo.x, MTY, _mo.z);
 W.boardGroup.add(W.layers);
 W.sky.visible = false;
 const scroller = initScroll();
-const bgfx = initBackground();
 const cursorFx = initCursor();
 W.setSkin(S.skin);
 const P = W.rider.userData.P;
@@ -152,21 +152,21 @@ const POSES = {
   stance: () => pose({ cam: [0, 3.3, -1.3], look: [0, 0, 0.06], boots: 1, arrow: 1, mk: 0.85 }),
   postura: () => {
     const f = F();
-    let cam = [3.3, 1.35, 2.2], look = [0, 0.72, 0];
-    if (f === 'rodillas') { cam = [2.2, 0.75, 1.7]; look = [0, 0.45, 0]; }
-    if (f === 'hombros') { cam = [0.2, 2.0, -2.8]; look = [0, 1.1, 0]; }
-    if (f === 'mirada') { cam = [1.6, 1.6, 2.2]; look = [0, 1.35, 0]; }
-    if (f === 'cadera') { cam = [2.6, 1.0, 1.4]; look = [0, 0.7, 0]; }
-    return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.4 });
+    let cam = [2.7, 0.95, 2.5], look = [0, 0.86, 0];
+    if (f === 'rodillas') { cam = [2.1, 0.62, 1.7]; look = [0, 0.48, 0]; }
+    if (f === 'hombros') { cam = [0.25, 2.1, -2.7]; look = [0, 1.15, 0]; }
+    if (f === 'mirada') { cam = [1.6, 1.5, 2.0]; look = [0, 1.35, 0]; }
+    if (f === 'cadera') { cam = [2.5, 0.9, 1.4]; look = [0, 0.72, 0]; }
+    return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.35 });
   },
-  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.7, -4.7], look: [S.sim.x * 0.5, 0.85, 1.0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.3 }),
-  cantos: () => pose({ cam: [3.4, 1.15, -1.7], look: [0, 0.6, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.4 }),
-  hoja: () => pose({ cam: [S.sim.x * 0.55, 2.9, -4.6], look: [S.sim.x * 0.55, 0.8, 1.3], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
-  giro: () => pose({ cam: [S.sim.x * 0.45, 3.7, -5.0], look: [S.sim.x * 0.45, 0.85, 1.7], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.7 }),
-  trucos: () => pose({ cam: [3.5, 1.7, -3.5], look: [0, 0.8, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.5 }),
+  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.0, -5.0], look: [S.sim.x * 0.5, 1.05, 1.6], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.25 }),
+  cantos: () => pose({ cam: [3.5, 0.85, -2.5], look: [0, 0.8, 0.2], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.35 }),
+  hoja: () => pose({ cam: [S.sim.x * 0.5 + 3.0, 3.4, -5.6], look: [S.sim.x * 0.5, 0.75, 2.2], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
+  giro: () => pose({ cam: [S.sim.x * 0.45 - 2.6, 2.1, -4.6], look: [S.sim.x * 0.45, 0.95, 1.8], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.8 }),
+  trucos: () => pose({ cam: [2.7, 0.4, -2.7], look: [0, 1.25, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.4 }),
   juego: () => pose({ cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1 }),
-  consejos: (t) => pose({ cam: [0, 0.2, 3.9], look: [0, 0, 0], pos: [0, Math.sin(t) * 0.04, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
-  final: (t) => pose({ cam: [0, 0.1, 3.3], look: [0, 0, 0], pos: [0, Math.sin(t * 1.3) * 0.06, 0], rot: [0.2, t * 0.8, 1.05] }),
+  consejos: (t) => pose({ cam: [0, 0.25, 3.8], look: [0, 0.05, 0], pos: [0, 0.25 + Math.sin(t) * 0.05, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
+  final: (t) => pose({ cam: [0, 0.55, 5.2], look: [0, 0.45, 0], pos: [0, 0.5 + Math.sin(t * 1.3) * 0.08, 0], rot: [0.2, t * 0.6, 1.05], mk: 1.1 }),
 };
 function mix3(a, b, k) { return [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)]; }
 const SIM_MODE = { pedales: 'drill', cantos: 'hold', hoja: 'leaf', giro: 'turn', juego: 'leaf' };
@@ -206,8 +206,10 @@ function readScroll() {
 /* ---------------- Navegación ---------------- */
 const dotsEl = $('#dots'), listEl = $('#drawer-list');
 sections.forEach((s, i) => {
+  if (i > 0) { const g = document.createElement('i'); g.className = 'rail-seg'; dotsEl.appendChild(g); }
   const d = document.createElement('button');
-  d.innerHTML = `<span>${s.title}</span>`; d.setAttribute('aria-label', s.title);
+  d.className = 'rail-pt'; d.dataset.n = String(i).padStart(2, '0');
+  d.innerHTML = `<span class="rail-tip">${s.title}</span>`; d.setAttribute('aria-label', s.title);
   d.addEventListener('click', () => goTo(s.id));
   dotsEl.appendChild(d);
   const li = document.createElement('li');
@@ -216,7 +218,7 @@ sections.forEach((s, i) => {
   li.firstChild.addEventListener('click', () => { closeMenu(); goTo(s.id); });
   listEl.appendChild(li);
 });
-const dotBtns = $$('button', dotsEl), listBtns = $$('button', listEl);
+const dotBtns = $$('button', dotsEl), listBtns = $$('button', listEl), segEls = $$('.rail-seg', dotsEl);
 function goTo(id) { const s = byId[id]; if (!s) return; scroller.scrollTo(s.i === 0 ? 0 : Math.max(0, s.top + s.h * 0.5 - innerHeight * 0.5)); }
 $$('[data-goto]').forEach((b) => b.addEventListener('click', (e) => { e.preventDefault(); goTo(b.dataset.goto); }));
 const menuBtn = $('#menu-btn');
@@ -228,7 +230,7 @@ $('.drawer-close').addEventListener('click', closeMenu);
 $$('[data-open-menu]').forEach((b) => b.addEventListener('click', openMenu));
 
 /* ---------------- HUD, panel y puntos ---------------- */
-const hud = $('#hud'), hudDock = $('#hud-dock'), sheetBody = $('#sheet-body');
+const hud = $('#hud'), hudDock = $('#hud-dock'), sheetBody = $('#sheet-body'), leadEl = $('#hud-lead');
 let hudSection = -1, openNode = null, openHome = null;
 const visited = new Set();
 
@@ -256,7 +258,6 @@ function closeSheet(keepFocus) {
 }
 $('.sheet-close').addEventListener('click', () => closeSheet());
 $('#hud-info').addEventListener('click', () => openInfo(sections[hudSection].id, 'main'));
-$('#hud-next').addEventListener('click', () => { const n = sections[Math.min(hudSection + 1, sections.length - 1)]; goTo(n.id); });
 canvas.addEventListener('click', () => { if (spin.moved < 8 && document.body.classList.contains('sheet-open')) closeSheet(); });
 addEventListener('keydown', (e) => { if (e.code === 'Escape') { if (game.on) quitGame(); else { closeSheet(); closeMenu(); } } });
 
@@ -267,22 +268,21 @@ function setHud(i) {
   hudSection = i;
   const s = sections[i];
   document.body.classList.toggle('hero-mode', s.id === 'inicio');
-  hud.classList.add('swap');
+  hud.classList.add('swap'); leadEl.classList.add('swap');
   setTimeout(() => {
-    $('#hud-num').textContent = String(i).padStart(2, '0');
-    $('#hud-kick').textContent = s.id === 'juego' ? 'El reto' : s.id === 'final' ? 'Fin de la clase' : `Paso ${String(i).padStart(2, '0')}`;
+    $('#hud-kick').textContent = s.id === 'final' ? 'Fin de la clase' : `Capítulo ${String(i).padStart(2, '0')}`;
     splitInto($('#hud-title'), s.title);
-    $('#hud-lead').textContent = s.lead;
+    leadEl.textContent = s.lead;
     $('#hud-hint').textContent = s.hint;
+    hud.dataset.pos = s.el.dataset.pos || 'left';
+    document.body.dataset.pos = hud.dataset.pos;
     hudDock.replaceChildren();
     if (s.dock) hudDock.appendChild(s.dock);
-    $('#hud-next').style.visibility = i === sections.length - 1 ? 'hidden' : 'visible';
-    hud.classList.remove('swap');
-  }, 180);
+    hud.classList.remove('swap'); leadEl.classList.remove('swap');
+  }, 260);
   $('#menu-count').textContent = `${String(i).padStart(2, '0')}/${String(sections.length - 1).padStart(2, '0')}`;
-  $('#top-num').textContent = String(i).padStart(2, '0'); $('#top-title').textContent = s.title;
-  bgfx.setWord(s.big);
-  dotBtns.forEach((d, k) => d.classList.toggle('on', k === i));
+  dotBtns.forEach((d, k) => { d.classList.toggle('is-current', k === i); d.classList.toggle('is-passed', k < i); });
+  segEls.forEach((g, k) => { g.classList.toggle('is-passed', k < i); g.classList.toggle('is-live', k === i); });
   listBtns.forEach((d, k) => { d.classList.toggle('on', k === i); d.classList.toggle('done', k < i); });
 }
 
@@ -451,7 +451,6 @@ function setSkin(sk) {
   $$('[data-skin]').forEach((b) => b.classList.toggle('on', b.dataset.skin === sk));
   if (changed) { spin.vy += 11; spin.idle = 0; } // la tabla da una vuelta al cambiar
 }
-$$('[data-skin]').forEach((b) => b.addEventListener('click', () => setSkin(b.dataset.skin)));
 setSkin(S.skin);
 
 const answers = [];
@@ -664,7 +663,6 @@ function frame(now) {
   lastT = now; clock += dt;
   const t = clock;
   readScroll();
-  $('#progress-bar').style.transform = `scaleX(${SC.progress})`;
   if (!game.on) setHud(SC.active);
 
   S.dir = damp(S.dir, S.stance === 'goofy' ? -1 : 1, 5, dt);
@@ -818,10 +816,13 @@ function frame(now) {
     camera.position.set(look[0] + ox1, look[1] + (cp[1] - look[1]) * zoom, look[2] + oz1);
     camera.lookAt(look[0], look[1], look[2]);
     const sheet = document.body.classList.contains('sheet-open');
-    const hero = secId === 'inicio';
+    const hero = secId === 'inicio', P0 = sections[SC.active].el.dataset.pos || 'left';
     let ox = 0, oy = 0;
-    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.24 : 0.17);
-    else { ox = vw * (sheet ? 0.16 : hero ? -0.12 : -0.1); oy = hero ? 0 : -vh * 0.03; }
+    if (mobile) oy = vh * (sheet ? 0.27 : hero ? 0.3 : 0.16);
+    else if (sheet) ox = vw * 0.16;
+    else if (hero || P0 === 'left') ox = -vw * (cur.rider > 0.5 ? 0.17 : 0.13);
+    else if (P0 === 'right') ox = vw * (cur.rider > 0.5 ? 0.17 : 0.13);
+    else oy = vh * 0.1;
     offX = damp(offX, ox, 5, dt); offY = damp(offY, oy, 5, dt);
     camera.setViewOffset(vw, vh, offX, offY, vw, vh);
   } else camera.clearViewOffset();
@@ -843,11 +844,21 @@ function frame(now) {
   renderer.render(W.scene, camera);
   updateHotspots(vw, vh);
   updateSpecs(vw, vh, focusSec);
-  bgfx.update(SC.progress, SC.active === SC.a ? SC.pa : SC.pb);
   requestAnimationFrame(frame);
 }
 
-requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('done'); html.classList.add('ready'); }, 450); });
+requestAnimationFrame((now) => { lastT = now; frame(now); loaderProgress(1); setTimeout(() => { $('#loader').classList.add('ready'); enterBtn.disabled = false; }, 350); });
+const enterBtn = $('#ld-enter');
+function enter() {
+  if (html.classList.contains('ready') || enterBtn.disabled) return;
+  $('#loader').classList.add('done'); html.classList.add('ready');
+  try { sessionStorage.setItem('snowprofe:in', '1'); } catch { /* sin almacenamiento */ }
+}
+enterBtn.addEventListener('click', enter);
+addEventListener('keydown', (e) => { if (e.code === 'Enter' || e.code === 'Space') enter(); });
+addEventListener('wheel', () => enter(), { passive: true, once: true });
+// si ya habías entrado en esta visita, no vuelve a pedirlo
+try { if (sessionStorage.getItem('snowprofe:in')) { const t = setInterval(() => { if (!enterBtn.disabled) { clearInterval(t); enter(); } }, 100); } } catch { /* nada */ }
 setTimeout(() => W.loadOutdoor().then(() => MT.setSnowNormal(W.snowTextures.snowNm)), 900);
 // Regulador: si el dispositivo no llega a ~45 fps, baja la resolución (y la sube si sobra)
 const perf = { n: 0, t: 0 };
