@@ -69,7 +69,7 @@ export function buildBackdrop(scene, { low = false } = {}) {
         float d = -mv.z;
         vSize = aSize;
         vFade = smoothstep(1.2, 3.0, d) * (1.0 - smoothstep(9.0, 12.0, d));
-        gl_PointSize = clamp(aSize * uScale / d, 1.0, 22.0);
+        gl_PointSize = clamp(aSize * uScale / d, 1.0, 9.0);
       }`,
     fragmentShader: `
       uniform float uOpacity; varying float vSize; varying float vFade;

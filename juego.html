@@ -2,77 +2,11 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>La montaña — SNOW·PROFE</title>
-  <meta name="description" content="Una montaña abierta con cuatro pistas, bosque y snowpark. Bájala con tu tabla y solo los pedales.">
-  <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#f5f2ec">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Marcellus+SC&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SNOW·PROFE</title>
+  <meta name="robots" content="noindex">
+  <meta http-equiv="refresh" content="0; url=./">
+  <link rel="canonical" href="./">
 </head>
-<body class="game-page">
-  <div id="loader" aria-hidden="true">
-    <div class="ld-top"><span>Snow·Profe</span><span>La montaña</span></div>
-    <div class="ld-mid"><span class="ld-word">Subiendo<em> en telesilla</em></span></div>
-    <div class="ld-bot"><span class="ld-count" id="ld-count">000</span><i class="ld-bar"><b id="ld-bar"></b></i></div>
-  </div>
-  <canvas id="scene" aria-hidden="true"></canvas>
-  <div id="flash" aria-hidden="true"></div>
-  <div id="grain" aria-hidden="true"></div>
-
-  <!-- Menú de salida -->
-  <div id="start" class="start">
-    <a class="link-btn back" href="./">← Volver a la clase</a>
-    <div class="start-card">
-      <p class="kicker">Mundo abierto <span>—</span> 4 pistas · bosque · snowpark</p>
-      <h1>La montaña</h1>
-      <p class="lead">Elige dónde empiezas. Baja por las pistas, métete en el bosque o vuela en el snowpark: por donde quieras.</p>
-      <p class="kicker">Empiezas en</p>
-      <div class="seg spawn-pick" role="group" aria-label="Salida">
-        <button data-spawn="verde"><i class="pd" style="--c:#2fb36b"></i>Verde</button>
-        <button data-spawn="azul" class="on"><i class="pd" style="--c:#2f6bff"></i>Azul</button>
-        <button data-spawn="roja"><i class="pd" style="--c:#e5233d"></i>Roja</button>
-        <button data-spawn="negra"><i class="pd" style="--c:#16181d"></i>Negra</button>
-        <button data-spawn="park"><i class="pd" style="--c:#ffb020"></i>Snowpark</button>
-      </div>
-      <button class="btn primary big" id="play-btn">▶ A la nieve</button>
-      <ul class="pedal-rules compact">
-        <li><i class="k l">IZQ</i><span>Pie izquierdo → izquierda. <b>Pie derecho</b> → derecha.</span></li>
-        <li><i class="k">⤒</i><span>Mantén <b>SALTAR</b> y suelta. En el aire: pedales = giros, SALTAR = grab.</span></li>
-      </ul>
-      <p class="best">Récord de puntos: <b id="best-points">0</b> · Mayor bajada: <b id="best-drop">0</b> m</p>
-      <p class="hint">En el ordenador: ← → y la barra espaciadora. <b>E</b> = telesilla.</p>
-    </div>
-  </div>
-
-  <div id="game" hidden>
-    <div class="game-top">
-      <div class="g-box"><b id="g-speed">0</b><span>km/h</span></div>
-      <div class="g-box g-score"><b id="g-score">0</b><span>puntos</span></div>
-      <div class="g-mid">
-        <b class="g-where" id="g-where">—</b>
-        <div class="g-sub"><span id="g-time">0:00</span><span id="g-drop">0 m ↓</span></div>
-      </div>
-      <button class="icon-btn" id="game-exit" aria-label="Salir">✕</button>
-    </div>
-    <canvas id="minimap" width="180" height="180" aria-label="Mapa"></canvas>
-    <button class="lift-btn" id="lift-btn">⤒ Telesilla</button>
-    <div class="game-msg" id="game-msg"></div>
-    <div class="game-trick" id="g-trick"><b></b><span></span></div>
-    <div class="game-controls">
-      <button class="pedal" data-pedal="L"><span>◀ Pie izq.</span><i class="meter"><b></b></i></button>
-      <button class="jump" id="jump-btn"><i class="charge"></i><span>⤒</span><small>Saltar</small></button>
-      <button class="pedal" data-pedal="R"><span>Pie der. ▶</span><i class="meter"><b></b></i></button>
-    </div>
-  </div>
-  <div id="rotate-lock"><div class="phone"></div><p>Gira el móvil en vertical</p></div>
-  <script type="module" src="js/play.js"></script>
-</body>
+<body><p>El juego vuelve pronto. <a href="./">Ir a la clase</a></p></body>
 </html>

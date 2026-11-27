@@ -84,7 +84,7 @@ const BD = buildBackdrop(W.scene, { low: LOW });
 BD.ground.visible = false;
 // La misma montaña del juego, de fondo: cielo vivo, bosques, telesillas y gente bajando
 const TERR = [60, -360];   // mirador en la pista azul, a media montaña
-const MT = createMountain(W, { low: LOW, res: LOW ? 201 : 281, detail: LOW ? 0.55 : 0.8, terrace: TERR });
+const MT = createMountain(W, { low: LOW, res: LOW ? 201 : 281, detail: LOW ? 0.55 : 0.8, terrace: TERR, extras: false });
 const MTH = MT.T.heightAt(TERR[0], TERR[1]);
 // la montaña se coloca para que el mirador quede bajo la tabla: cima a la derecha, valle abierto a la izquierda
 MT.world.group.rotation.y = -Math.PI / 2;
@@ -97,6 +97,21 @@ const scroller = initScroll();
 const cursorFx = initCursor();
 W.setSkin(S.skin);
 const P = W.rider.userData.P;
+W.rider.visible = false;
+const feet = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 320;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff';
+  g.beginPath(); g.ellipse(64, 205, 46, 100, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(64, 70, 40, 52, 0, 0, Math.PI * 2); g.fill();
+  const tex = new THREE.CanvasTexture(c);
+  const mk = (b) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.27), new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.PI; m.position.set(0, 0.055, 0.0); m.renderOrder = 5; m.material.depthTest = false;
+    b.add(m); return m;
+  };
+  return { L: mk(W.bindL), R: mk(W.bindR) };
+})();
 const studio = { top: new THREE.Color('#07080b'), bot: new THREE.Color('#25272f') };
 const spin = { on: false, id: null, x: 0, y: 0, t: 0, moved: 0, yaw: 0, pitch: 0, vy: 0, vp: 0, idle: 0 };
 const bF = () => (S.dir > 0 ? W.bindL : W.bindR);
@@ -117,7 +132,7 @@ function measure() {
 /* ---------------- Poses por paso ---------------- */
 const DEF = {
   cam: [0, 0.3, 3.4], look: [0, 0, 0], pos: [0, 0, 0], rot: [0, 0, 0],
-  explode: 0, layers: 0, bexp: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0, crouch: 0.5, trick: 0, mk: 1,
+  explode: 0, layers: 0, bexp: 0, boots: 0, rider: 0, slope: 0, sim: 0, arrow: 0, edges: 0, glow: 0, crouch: 0.5, trick: 0, mk: 1, feet: 0,
 };
 const pose = (o) => ({ ...DEF, ...o });
 const GROUND = 0.012;
@@ -149,22 +164,16 @@ const POSES = {
     if (f === 'disco') { cam = [x + 0.55, 0.35, 0.7]; look = [x, 0.06, 0]; }
     return pose({ cam, look, rot: [0, f === 'angulos' ? 0 : -0.12 + (p - 0.5) * 0.5 * e, 0], bexp: e, mk: f === 'angulos' ? 1.25 : 0.6 + e * 0.4 });
   },
-  stance: () => pose({ cam: [0, 3.3, -1.3], look: [0, 0, 0.06], boots: 1, arrow: 1, mk: 0.85 }),
-  postura: () => {
-    const f = F();
-    let cam = [2.7, 0.95, 2.5], look = [0, 0.86, 0];
-    if (f === 'rodillas') { cam = [2.1, 0.62, 1.7]; look = [0, 0.48, 0]; }
-    if (f === 'hombros') { cam = [0.25, 2.1, -2.7]; look = [0, 1.15, 0]; }
-    if (f === 'mirada') { cam = [1.6, 1.5, 2.0]; look = [0, 1.35, 0]; }
-    if (f === 'cadera') { cam = [2.5, 0.9, 1.4]; look = [0, 0.72, 0]; }
-    return pose({ cam, look, pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, crouch: S.crouch, glow: f === 'cadera' ? 1 : 0.4, mk: 1.35 });
-  },
-  pedales: () => pose({ cam: [S.sim.x * 0.5, 2.0, -5.0], look: [S.sim.x * 0.5, 1.05, 1.6], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 1.25 }),
-  cantos: () => pose({ cam: [3.5, 0.85, -2.5], look: [0, 0.8, 0.2], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 1, mk: 1.35 }),
-  hoja: () => pose({ cam: [S.sim.x * 0.5 + 3.0, 3.4, -5.6], look: [S.sim.x * 0.5, 0.75, 2.2], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 1, mk: 0.9 }),
-  giro: () => pose({ cam: [S.sim.x * 0.45 - 2.6, 2.1, -4.6], look: [S.sim.x * 0.45, 0.95, 1.8], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, edges: 0.7, mk: 0.8 }),
-  trucos: () => pose({ cam: [2.7, 0.4, -2.7], look: [0, 1.25, 0], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, trick: 1, mk: 1.4 }),
-  juego: () => pose({ cam: [S.sim.x * 0.5, 2.8, -4.6], look: [S.sim.x * 0.5, 0.3, 2.4], pos: [0, GROUND, 0], boots: 1, rider: 1, slope: 1, sim: 1, glow: 0.8, mk: 1.1 }),
+  stance: (t) => pose({ cam: [0.3, 3.3, -2.0], look: [0, 0, 0.18], pos: [0, GROUND, 0], slope: 1, arrow: 1, feet: 1, mk: 0.7 }),
+  // capítulos con foto: la tabla se va volando y queda la montaña de fondo
+  postura: (t) => pose({ cam: [Math.sin(t * 0.12) * 0.4, 1.0, 3.4], look: [0, 1.7, -12], pos: [0, 6, 0], rot: [0.3, t * 0.4, 0.6], mk: 1 }),
+  cantos: (t) => pose({ cam: [Math.sin(t * 0.12) * 0.4 - 0.6, 1.1, 3.2], look: [-2, 1.9, -12], pos: [0, 6, 0], rot: [0.3, t * 0.4, 0.6], mk: 1 }),
+  // la tabla sola en la nieve: pedales, hoja muerta y giro dejan su huella
+  pedales: () => pose({ cam: [S.sim.x * 0.6, 3.4, -3.0], look: [S.sim.x * 0.6, 0, -0.55], pos: [0, GROUND, 0], slope: 1, sim: 1, glow: 1, feet: 1, mk: 1.2 }),
+  hoja: () => pose({ cam: [S.sim.x * 0.5, 4.2, -3.2], look: [S.sim.x * 0.5, 0, -0.8], pos: [0, GROUND, 0], slope: 1, sim: 1, glow: 1, feet: 1, mk: 0.8 }),
+  giro: () => pose({ cam: [S.sim.x * 0.45, 4.4, -3.4], look: [S.sim.x * 0.45, 0, -0.8], pos: [0, GROUND, 0], slope: 1, sim: 1, edges: 0.8, feet: 1, mk: 1.0 }),
+  trucos: () => pose({ cam: [2.3, 0.55, -2.3], look: [0, 0.45, 0], pos: [0, GROUND, 0], slope: 1, trick: 1, feet: 1, mk: 1.25 }),
+  juego: () => pose({ cam: [0, 2.8, -4.6], look: [0, 0.3, 2.4], pos: [0, GROUND, 0], slope: 1, mk: 1.1 }),
   consejos: (t) => pose({ cam: [0, 0.25, 3.8], look: [0, 0.05, 0], pos: [0, 0.25 + Math.sin(t) * 0.05, 0], rot: [0.45, t * 0.45, 0.5], mk: 1.2 }),
   final: (t) => pose({ cam: [0, 0.55, 5.2], look: [0, 0.45, 0], pos: [0, 0.5 + Math.sin(t * 1.3) * 0.08, 0], rot: [0.2, t * 0.6, 1.05], mk: 1.1 }),
 };
@@ -241,6 +250,7 @@ function openInfo(secId, infoId) {
   closeSheet(true);
   openNode = node; openHome = sec.infos;
   node.hidden = false;
+  node.querySelectorAll('img[data-src]').forEach((im) => { im.src = im.dataset.src; im.removeAttribute('data-src'); });
   sheetBody.appendChild(node);
   $('#sheet-kicker').textContent = `${String(sec.i).padStart(2, '0')} · ${sec.title}`;
   document.body.classList.add('sheet-open');
@@ -261,6 +271,49 @@ $('#hud-info').addEventListener('click', () => openInfo(sections[hudSection].id,
 canvas.addEventListener('click', () => { if (spin.moved < 8 && document.body.classList.contains('sheet-open')) closeSheet(); });
 addEventListener('keydown', (e) => { if (e.code === 'Escape') { if (game.on) quitGame(); else { closeSheet(); closeMenu(); } } });
 
+/* ---------------- Fotos reales ---------------- */
+const PHOTOS = {
+  postura: { src: 'assets/photos/postura.jpg', ratio: '4 / 5', cap: 'Foto: Staff Sgt. Sheila deVera · dominio público',
+    notes: [{ id: 'mirada', label: 'Mirada', x: 49, y: 12 }, { id: 'hombros', label: 'Hombros', x: 67, y: 26, left: true }, { id: 'cadera', label: 'Cadera', x: 50, y: 43, left: true }, { id: 'rodillas', label: 'Rodillas', x: 45, y: 58, left: true }] },
+  'cantos:back': { src: 'assets/photos/hoja.jpg', ratio: '3 / 2', cap: 'Back · talones — Foto: Staff Sgt. Sheila deVera · dominio público',
+    notes: [{ id: 'talones', label: 'Talones', x: 66, y: 47 }] },
+  'cantos:front': { src: 'assets/photos/puntas.jpg', ratio: '3 / 2', cap: 'Front · puntas — Foto: Mike Lahood y Todd Belt · CC BY 3.0',
+    notes: [{ id: 'puntas', label: 'Puntas', x: 27, y: 46 }] },
+};
+const FULL = { final: 'assets/photos/final.jpg' };
+const phEl = $('#photo'), phImg = $('#ph-img'), phNotes = $('#ph-notes'), phCap = $('#ph-cap'), fpEl = $('#fullphoto'), fpImg = $('#fp-img');
+let phKey = null;
+function photoKey(s) { if (!s.el.dataset.photo) return null; return s.id === 'cantos' ? `cantos:${S.edge}` : s.el.dataset.photo; }
+function showPhoto(sec) {
+  const key = sec ? photoKey(sec) : null;
+  if (key === phKey) return;
+  phKey = key;
+  phEl.classList.remove('on');
+  if (!key) return;
+  const P = PHOTOS[key];
+  setTimeout(() => {
+    if (phKey !== key) return;
+    phEl.dataset.side = (sec.el.dataset.pos || 'left') === 'right' ? 'left' : 'right';
+    phEl.style.setProperty('--ratio', P.ratio);
+    phCap.textContent = P.cap;
+    phNotes.replaceChildren(...P.notes.map((n) => {
+      const b = document.createElement('button');
+      b.className = 'ph-note' + (n.left ? ' left' : '');
+      b.style.left = n.x + '%'; b.style.top = n.y + '%';
+      b.innerHTML = `<i></i><span>${n.label}</span>`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); openInfo(sec.id, n.id); $$('.ph-note', phNotes).forEach((x) => x.classList.toggle('active', x === b)); b.classList.add('visited'); });
+      return b;
+    }));
+    const go = () => { if (phKey === key) phEl.classList.add('on'); };
+    if (phImg.getAttribute('src') !== P.src) { phImg.onload = go; phImg.src = P.src; } else go();
+  }, 420);
+}
+function showFull(sec) {
+  const src = sec && FULL[sec.id];
+  fpEl.classList.toggle('on', !!src);
+  if (src && fpImg.getAttribute('src') !== src) fpImg.src = src;
+}
+
 function setHud(i) {
   if (i === hudSection) return;
   closeSheet();
@@ -280,6 +333,8 @@ function setHud(i) {
     if (s.dock) hudDock.appendChild(s.dock);
     hud.classList.remove('swap'); leadEl.classList.remove('swap');
   }, 260);
+  showPhoto(s); showFull(s);
+  document.body.classList.remove('cut'); void document.body.offsetWidth; document.body.classList.add('cut');
   $('#menu-count').textContent = `${String(i).padStart(2, '0')}/${String(sections.length - 1).padStart(2, '0')}`;
   dotBtns.forEach((d, k) => { d.classList.toggle('is-current', k === i); d.classList.toggle('is-passed', k < i); });
   segEls.forEach((g, k) => { g.classList.toggle('is-passed', k < i); g.classList.toggle('is-live', k === i); });
@@ -308,31 +363,23 @@ const HOT = {
     { id: 'der', label: 'Pie der.', a: () => parts(W.bindR).aFoot },
     { id: 'nose', label: 'Hacia aquí', a: () => W.arrow.userData.tip },
   ],
-  postura: [
-    { id: 'mirada', label: 'Mirada', a: () => P.aHead },
-    { id: 'hombros', label: 'Hombros', a: () => P.aShoulder, left: true },
-    { id: 'cadera', label: 'Cadera', a: () => P.aHip },
-    { id: 'rodillas', label: 'Rodillas', a: () => P.aKnee },
-  ],
+  postura: [],
   pedales: [
     { id: 'pieizq', label: 'Pedal izq.', a: () => parts(W.bindL).aFoot, left: true },
     { id: 'pieder', label: 'Pedal der.', a: () => parts(W.bindR).aFoot },
   ],
-  cantos: [
-    { id: 'talones', label: 'Talones', a: () => W.anchors.heelEdge, left: true },
-    { id: 'puntas', label: 'Puntas', a: () => W.anchors.toeEdge },
-  ],
+  cantos: [],
   hoja: [
-    { id: 'ejercicio', label: 'Cómo', a: () => P.aHead },
+    { id: 'ejercicio', label: 'Cómo', a: () => (S.dir > 0 ? W.anchors.nose : W.anchors.tail) },
     { id: 'huella', label: 'La huella', a: () => W.anchors.center },
   ],
   giro: [
-    { id: 'mirada', label: '1 · Mira', a: () => P.aHead },
+    { id: 'mirada', label: '1 · Mira', a: () => (S.dir > 0 ? W.anchors.nose : W.anchors.tail) },
     { id: 'pedal', label: '2 · Pedal', a: pa(bF, 'aFoot') },
     { id: 'plana', label: '3 · Plana', a: () => W.anchors.center, left: true },
     { id: 'cambio', label: '4 · Canto', a: () => W.anchors.toeEdge },
   ],
-  trucos: [{ id: 'pasos', label: 'Cómo se hace', a: () => P.aHead }],
+  trucos: [{ id: 'pasos', label: 'Cómo se hace', a: () => W.anchors.topC }],
   consejos: TIPS.map((t, i) => ({ id: 'tip' + i, tip: t.e, label: t.t, a: () => W.ring[i], left: Math.cos((i / 8) * Math.PI * 2 + 0.3) < 0 })),
 };
 
@@ -437,7 +484,7 @@ angFront.addEventListener('input', () => { setAngles(+angFront.value, S.angB); $
 angBack.addEventListener('input', () => { setAngles(S.angF, +angBack.value); $$('[data-preset]').forEach((x) => x.classList.remove('on')); });
 segGroup('[data-preset]', 'preset', (v) => { const [f, b] = v.split(',').map(Number); setAngles(f, b); });
 
-function setStance(st) { S.stance = st; store.set('stance', st); $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st)); }
+function setStance(st) { if (S.stance !== st) spin.vy += 11; S.stance = st; store.set('stance', st); $$('[data-stance]').forEach((b) => b.classList.toggle('on', b.dataset.stance === st)); }
 segGroup('[data-stance]', 'stance', setStance);
 setStance(S.stance);
 
@@ -469,7 +516,7 @@ $$('#quiz .q').forEach((q) => {
   }));
 });
 segGroup('[data-crouch]', 'crouch', (v) => { S.crouch = +v; });
-function setEdge(e) { S.edge = e; $$('[data-edge]').forEach((b) => b.classList.toggle('on', b.dataset.edge === e)); }
+function setEdge(e) { S.edge = e; $$('[data-edge]').forEach((b) => b.classList.toggle('on', b.dataset.edge === e)); if (hudSection >= 0 && sections[hudSection].id === 'cantos') showPhoto(sections[hudSection]); }
 $$('[data-edge]').forEach((b) => b.addEventListener('click', () => setEdge(b.dataset.edge)));
 
 function showTrick(name) {
@@ -575,16 +622,16 @@ const trailPts = [];
 let trailAcc = 0;
 function stepTrail(dt, active, speed) {
   for (const p of trailPts) p.z -= speed * dt;
-  while (trailPts.length && trailPts[0].z < -8) trailPts.shift();
+  while (trailPts.length && trailPts[0].z < -14) trailPts.shift();
   trailAcc += dt;
-  if (active && trailAcc > 1 / 40) {
+  if (active && trailAcc > 1 / 20) {
     trailAcc = 0;
     const yaw = W.rig.rotation.y, ax = Math.cos(yaw), az = -Math.sin(yaw);
     const last = trailPts[trailPts.length - 1];
     let mx = 0, mz = 1;
     if (last) { mx = W.rig.position.x - last.x; mz = -last.z; const l = Math.hypot(mx, mz) || 1; mx /= l; mz /= l; }
     const px = mz, pz = -mx;
-    trailPts.push({ x: W.rig.position.x, z: 0, px, pz, hw: 0.66 * Math.abs(ax * px + az * pz) + 0.07 });
+    trailPts.push({ x: W.rig.position.x, z: 0, px, pz, hw: 0.66 * Math.abs(ax * px + az * pz) + 0.12 });
     if (trailPts.length > W.TRAIL) trailPts.shift();
   }
   if (!active && speed < 0.01) trailPts.length = 0;
@@ -681,7 +728,15 @@ function frame(now) {
   if (!game.on) {
     const A = sections[SC.a], B = sections[SC.b];
     const target = mixPose(POSES[A.id](t, SC.pa), POSES[B.id](t, SC.pb), SC.f);
+    // entre capítulos la cámara se aleja y sube en arco, como un dron
+    const arc = Math.sin(Math.PI * SC.f);
+    if (arc > 0.001) {
+      const c = target.cam, l = target.look;
+      for (let k = 0; k < 3; k++) c[k] = l[k] + (c[k] - l[k]) * (1 + 0.32 * arc);
+      c[1] += 0.55 * arc;
+    }
     dampPose(target, dt, 4.5);
+    cur.rider = 0; cur.boots = 0;
     mode = SIM_MODE[modeId] || 'still';
     stepSim(dt, mode, t);
     if (cur.trick > 0.01) {
@@ -726,6 +781,15 @@ function frame(now) {
     p.boot.scale.setScalar(Math.max(0.001, cur.boots));
   }
   W.mats.boot.opacity = W.mats.bootDark.opacity = W.mats.bootAccent.opacity = clamp(cur.boots * 1.5, 0, 1);
+  { // pie de delante en rojo, el de atrás en blanco; se encienden al apretar el pedal
+    const front = bF(), pulse = 0.75 + 0.25 * Math.sin(t * 3);
+    for (const [m, b, pv] of [[feet.L, W.bindL, S.pL], [feet.R, W.bindR, S.pR]]) {
+      const isF = b === front;
+      m.material.color.setHex(isF ? 0xe5233d : 0xffffff);
+      m.material.opacity = cur.feet * (secId === 'stance' ? (isF ? pulse : 0.8) : 0.45 + pv * 0.55);
+      m.visible = cur.feet > 0.02;
+    }
+  }
 
   if (!game.on) {
     const pitchComp = Math.abs(Math.sin(tr.pitch * tw)) * 0.72;
@@ -782,7 +846,7 @@ function frame(now) {
   W.slope.visible = sl > 0.01 && !game.on;
   W.groundMat.opacity = sl;
   for (const m of W.treeMats) m.opacity = sl;
-  W.trailMat.opacity = sl * 0.4;
+  W.trailMat.opacity = sl * 0.8; W.trailMat.color.setHex(0x7f95bb);
   const speed = sim.speed * sw;
   if (W.groundMat.normalMap) { W.groundMat.normalMap.offset.y -= speed * dt * 0.4; W.groundMat.roughnessMap.offset.y = W.groundMat.normalMap.offset.y; }
   for (const tree of W.trees) { tree.position.z -= speed * dt; if (tree.position.z < -8) tree.position.z += 48; }
@@ -883,4 +947,4 @@ $('#install-btn').addEventListener('click', async () => {
   deferredPrompt = null; $('#install-btn').hidden = true;
 });
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
-window.__snow = { renderer, W, S, game, RUN, input, MT };
+window.__snow = { renderer, W, S, game, RUN, input, MT, cur: () => cur };

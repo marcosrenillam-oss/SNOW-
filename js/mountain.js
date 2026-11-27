@@ -161,7 +161,7 @@ function pineGeo(seed, low = false) {
   return g;
 }
 
-export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, treeShadow = false } = {}) {
+export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, treeShadow = false, extras = true } = {}) {
   const group = new THREE.Group();
   const { N, cell, H, mask } = T;
   // ---- terreno ----
@@ -241,7 +241,7 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
 
   // ---- jalones de las pistas (color de cada pista) ----
   const poleGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.6, 6).translate(0, 0.8, 0);
-  for (const p of T.splines) {
+  for (const p of extras ? T.splines : []) {
     const n = Math.floor(p.pts.length / 6) * 2;
     const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.5 }), n);
     let pc = 0;
@@ -257,7 +257,7 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
   const towerMat = new THREE.MeshStandardMaterial({ color: 0xb9bfc8, metalness: 0.6, roughness: 0.4 });
   const chairMat = new THREE.MeshStandardMaterial({ color: 0x1b1d23, roughness: 0.6 });
   const lifts = [], towerParts = [];
-  const LIFTS = [[[70, 700], [35, 60]], [[150, 40], [210, -700]], [[-260, 690], [-320, -560]]];
+  const LIFTS = extras ? [[[70, 700], [35, 60]], [[150, 40], [210, -700]], [[-260, 690], [-320, -560]]] : [];
   for (const [[x0, z0], [x1, z1]] of LIFTS) {
     const tops = [], L = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(L / 60);
     for (let i = 0; i <= n; i++) {
@@ -274,7 +274,7 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
     lifts.push({ tops, n: nC, seat, dirX, dirZ });
   }
 
-  group.add(new THREE.Mesh(mergeGeometries(towerParts), towerMat));
+  if (towerParts.length) group.add(new THREE.Mesh(mergeGeometries(towerParts), towerMat));
 
   // ---- pueblo (chalets con tejado nevado y ventanas encendidas) ----
   const wood = new THREE.MeshStandardMaterial({ color: 0x8a5d3b, roughness: 0.85 });
@@ -299,13 +299,13 @@ export function buildMountainWorld(T, { low = false, detail = 1, snowNormal, tre
   const skierGeo = new THREE.CapsuleGeometry(0.32, 0.9, 4, 8).translate(0, 1.1, 0);
   const jackets = [0xe5233d, 0x2f6bff, 0xffb020, 0x1b1d23, 0x2fb36b, 0xffffff];
   const skiers = [];
-  const skierInst = new THREE.InstancedMesh(skierGeo, new THREE.MeshStandardMaterial({ roughness: 0.7 }), low ? 24 : 60);
+  const skierInst = new THREE.InstancedMesh(skierGeo, new THREE.MeshStandardMaterial({ roughness: 0.7 }), extras ? (low ? 24 : 60) : 0);
   for (let i = 0; i < skierInst.count; i++) {
     const p = T.splines[i % T.splines.length];
     skiers.push({ p, u: r(), speed: (6 + r() * 8) / p.length, off: (r() - 0.5) * p.w * 0.7, ph: r() * 6 });
     skierInst.setColorAt(i, new THREE.Color(jackets[i % jackets.length]));
   }
-  group.add(skierInst);
+  if (extras) group.add(skierInst);
 
   const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Quaternion();
   return {
@@ -365,10 +365,10 @@ export function buildRange() {
 }
 
 /* ---------- Todo junto: cielo, cordillera, montaña, luz y bruma ---------- */
-export function createMountain(W, { low = false, res, treeShadow = false, detail = 1, terrace = null } = {}) {
+export function createMountain(W, { low = false, res, treeShadow = false, detail = 1, terrace = null, extras = true } = {}) {
   const T = buildTerrain({ res: res || (low ? 201 : 321), terrace });
   const sky = buildSky(), range = buildRange();
-  const world = buildMountainWorld(T, { low, detail, treeShadow });
+  const world = buildMountainWorld(T, { low, detail, treeShadow, extras });
   W.scene.add(sky, range, world.group);
   W.scene.background = null;
   W.scene.fog = new THREE.Fog('#e6e2e2', 260, 2300);

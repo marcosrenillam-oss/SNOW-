@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>SNOW·PROFE — Aprende snowboard</title>
-  <meta name="description" content="Aprende snowboard paso a paso con tu tabla en 3D: fijaciones, regular o goofy, el método de los pedales, cantos, giros, trucos y una montaña abierta para bajar por donde quieras.">
+  <meta name="description" content="Aprende snowboard paso a paso con tu tabla en 3D: fijaciones, regular o goofy, la postura, el método de los pedales, cantos, hoja muerta, giros y trucos.">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#f5f2ec">
   <meta name="mobile-web-app-capable" content="yes">
@@ -37,6 +37,11 @@
   <div class="veil" aria-hidden="true"></div>
   <div id="specs" aria-hidden="true"></div>
   <div id="hotspots"></div>
+  <figure id="photo" aria-hidden="true">
+    <div class="ph-frame"><img id="ph-img" alt="" decoding="async"><div class="ph-notes" id="ph-notes"></div></div>
+    <figcaption id="ph-cap"></figcaption>
+  </figure>
+  <div id="fullphoto" aria-hidden="true"><img id="fp-img" alt="" decoding="async"></div>
   <div id="flash" aria-hidden="true"></div>
   <div id="cursor" aria-hidden="true"><i></i></div>
 
@@ -45,7 +50,7 @@
       <a href="#inicio" class="logo-chip" data-goto="inicio" aria-label="Inicio"><span>S</span></a>
       <button id="menu-btn" class="pill" aria-expanded="false" aria-controls="drawer"><span class="burger"><i></i><i></i></span><span>Índice</span><span class="count" id="menu-count">00/11</span></button>
     </div>
-    <a class="pill pill-play" href="juego.html"><span class="play-ico"></span><span>Jugar</span></a>
+    <button class="pill pill-play" data-goto="tabla" type="button"><span class="play-ico"></span><span>Empezar</span></button>
   </header>
 
   <nav id="dots" class="rail" aria-label="Capítulos"></nav>
@@ -57,9 +62,6 @@
       <button class="icon-btn drawer-close" aria-label="Cerrar">✕</button>
     </div>
     <ol id="drawer-list"></ol>
-    <div class="drawer-foot">
-      <a class="know solid" href="juego.html"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Jugar · La montaña</span></a>
-    </div>
   </aside>
 
   <!-- Capítulo actual -->
@@ -148,11 +150,11 @@
     </section>
 
     <!-- 03 -->
-    <section class="step" id="stance" data-pos="center" data-big="Goofy" data-lead="¿Qué pie va delante? Haz el test." data-title="¿Regular o goofy?" data-hint="Toca «¿Cuál eres?» y haz el test">
+    <section class="step" id="stance" data-pos="center" data-big="Goofy" data-lead="El pie que va delante marca hacia dónde bajas. Cambia y mira cómo gira la tabla." data-title="¿Regular o goofy?" data-hint="Cambia de postura o haz el test">
       <div class="dock">
-        <div class="seg" role="group" aria-label="Postura">
-          <button data-stance="regular" class="on">Regular · izq. delante</button>
-          <button data-stance="goofy">Goofy · der. delante</button>
+        <div class="stance-pick" role="group" aria-label="Postura">
+          <button data-stance="regular" class="on"><b>Regular</b><span>Izquierdo delante</span></button>
+          <button data-stance="goofy"><b>Goofy</b><span>Derecho delante</span></button>
         </div>
       </div>
       <div class="infos">
@@ -173,16 +175,9 @@
     </section>
 
     <!-- 04 -->
-    <section class="step" id="postura" data-pos="right" data-big="Postura" data-lead="Rodillas, cadera, hombros y mirada." data-title="Postura base" data-hint="Toca el cuerpo del rider">
-      <div class="dock">
-        <div class="seg" role="group" aria-label="Flexión">
-          <button data-crouch="0.1">Rígido ✗</button>
-          <button data-crouch="0.55" class="on">Flexionado ✓</button>
-          <button data-crouch="1">Demasiado ✗</button>
-        </div>
-      </div>
+    <section class="step" id="postura" data-pos="right" data-big="Postura" data-lead="Rodillas, cadera, hombros y mirada: los cuatro puntos que te sujetan." data-title="Postura base" data-hint="Toca los puntos de la foto" data-photo="postura">
       <div class="infos">
-        <div class="info" data-info="main" hidden><h3>La postura base</h3><p>Rodillas flexionadas, peso repartido, espalda recta y mirada hacia donde vas. Prueba los botones de abajo para ver la diferencia.</p></div>
+        <div class="info" data-info="main" hidden><h3>La postura base</h3><p>Rodillas flexionadas, peso repartido, espalda recta y mirada hacia donde vas. Mira la foto: así se baja tranquilo.</p><p class="hint">Toca cada punto de la foto para ver qué hace.</p></div>
         <div class="info" data-info="rodillas" hidden><h3>Rodillas flexionadas</h3><p>Como si te fueras a sentar en un <b>taburete alto</b>. Son tus amortiguadores: si vas rígido, cualquier bache te tira.</p></div>
         <div class="info" data-info="cadera" hidden><h3>Cadera centrada</h3><p>Peso <b>50 / 50</b> entre los dos pies, justo encima del centro de la tabla. Nada forzado.</p></div>
         <div class="info" data-info="hombros" hidden><h3>Hombros</h3><p><b>Paralelos a la tabla</b>. Si giras los hombros, la tabla gira detrás de ellos.</p></div>
@@ -191,7 +186,7 @@
     </section>
 
     <!-- 05 -->
-    <section class="step" id="pedales" data-pos="left" data-big="Pedales" data-lead="Aprieta un pie y la tabla va hacia ese lado." data-title="Los pedales" data-hint="Mantén pulsado un pedal">
+    <section class="step" id="pedales" data-pos="left" data-big="Pedales" data-lead="Aprieta un pie y la tabla va hacia ese lado. Mira la huella." data-title="Los pedales" data-hint="Mantén pulsado un pedal">
       <div class="dock">
         <div class="pedals" data-pedals>
           <button class="pedal" data-pedal="L"><span>Pie izq.</span><i class="meter"><b></b></i></button>
@@ -216,7 +211,7 @@
     </section>
 
     <!-- 06 -->
-    <section class="step" id="cantos" data-pos="right" data-big="Cantos" data-lead="Talones o puntas: siempre vas sobre un canto." data-title="Front y back" data-hint="Toca un canto de la tabla">
+    <section class="step" id="cantos" data-pos="right" data-big="Cantos" data-lead="Talones o puntas: siempre vas sobre un canto." data-title="Front y back" data-hint="Cambia de canto" data-photo="cantos">
       <div class="dock">
         <div class="seg" role="group" aria-label="Canto">
           <button data-edge="back" class="on">Back · talones</button>
@@ -231,7 +226,7 @@
     </section>
 
     <!-- 07 -->
-    <section class="step" id="hoja" data-pos="left" data-big="Hoja" data-lead="De lado a lado, sin girar la tabla." data-title="Hoja muerta" data-hint="Mira cómo baja y toca los puntos">
+    <section class="step" id="hoja" data-pos="left" data-big="Hoja" data-lead="De lado a lado, sin girar la tabla: mira el trazado que deja en la nieve." data-title="Hoja muerta" data-hint="Mira la huella en la nieve">
       <div class="dock">
         <div class="seg" role="group" aria-label="Canto">
           <button data-edge="back" class="on">De back</button>
@@ -241,7 +236,7 @@
       <div class="infos">
         <div class="info" data-info="main" hidden><h3>La hoja muerta</h3><p>El primer ejercicio de verdad. Te quedas en un canto y bajas de lado a lado como una hoja que cae de un árbol, <b>sin girar la tabla</b>. Solo con los pedales.</p></div>
         <div class="info" data-info="ejercicio" hidden><h3>Cómo practicarla</h3><ol class="steps-list"><li>Aprieta el pie izquierdo: te deslizas a la izquierda.</li><li>Iguala el peso: frenas.</li><li>Aprieta el derecho: te deslizas a la derecha.</li></ol><p class="hint">Primero de back. Cuando te salga, de front.</p></div>
-        <div class="info" data-info="huella" hidden><h3>La huella</h3><p>Mira lo que deja en la nieve: un <b>zig-zag ancho</b>. La tabla siempre está cruzada a la pista, nunca apunta hacia abajo.</p></div>
+        <div class="info" data-info="huella" hidden><figure class="sheet-photo"><img data-src="assets/photos/hoja.jpg" alt="Snowboarder bajando de lado por la pista"><figcaption>Foto: Staff Sgt. Sheila deVera · dominio público</figcaption></figure><h3>La huella</h3><p>Mira lo que deja en la nieve: un <b>zig-zag ancho</b>. La tabla siempre está cruzada a la pista, nunca apunta hacia abajo.</p></div>
       </div>
     </section>
 
@@ -249,7 +244,7 @@
     <section class="step" id="giro" data-pos="right" data-big="Giro" data-lead="Mira, pedal delantero, plana y cambio de canto." data-title="Tu primer giro" data-hint="Toca los 4 puntos en orden">
       <div class="dock"><div class="turn-phase" id="turn-phase"><span>●</span><b id="turn-label">Back · talones</b></div></div>
       <div class="infos">
-        <div class="info" data-info="main" hidden><h3>Tu primer giro</h3><p>Girar es pasar de un canto al otro. Con los pedales: cargas el <b>pie delantero</b> hasta que la punta mira hacia abajo, pasas por la <b>base plana</b> y cambias de canto.</p></div>
+        <div class="info" data-info="main" hidden><figure class="sheet-photo"><img data-src="assets/photos/giro.jpg" alt="Huella en S en nieve polvo"><figcaption>Foto: Dave O · CC BY-SA 2.0</figcaption></figure><h3>Tu primer giro</h3><p>Girar es pasar de un canto al otro. Con los pedales: cargas el <b>pie delantero</b> hasta que la punta mira hacia abajo, pasas por la <b>base plana</b> y cambias de canto.</p></div>
         <div class="info" data-info="mirada" hidden><h3>1 · Mira</h3><p>Gira la cabeza hacia donde quieres ir. El cuerpo sigue a la cabeza.</p></div>
         <div class="info" data-info="pedal" hidden><h3>2 · Pedal delantero</h3><p>Carga el <b>pie de delante</b>. La punta empieza a caer hacia abajo.</p></div>
         <div class="info" data-info="plana" hidden><h3>3 · Plana</h3><p>Un instante la tabla va <b>sin canto</b>, apuntando hacia abajo. No te asustes: dura un segundo.</p></div>
@@ -269,7 +264,7 @@
         </div>
       </div>
       <div class="infos">
-        <div class="info" data-info="main" hidden><h3>Trucos para empezar</h3><p>Cuando ya bajes tranquilo, toca jugar. Elige uno abajo y mira cómo se hace.</p></div>
+        <div class="info" data-info="main" hidden><figure class="sheet-photo"><img data-src="assets/photos/trucos.jpg" alt="Snowboarder en el aire agarrando la tabla"><figcaption>Foto: Matt Biddulph · CC BY-SA 2.0</figcaption></figure><h3>Trucos para empezar</h3><p>Cuando ya bajes tranquilo, toca jugar. Elige uno abajo y mira cómo se hace.</p></div>
         <div class="info" data-info="pasos" hidden><div id="trick-info"></div></div>
       </div>
     </section>
@@ -278,12 +273,12 @@
     <!-- 10 -->
     <section class="step" id="consejos" data-pos="right" data-big="Consejos" data-lead="Lo que me enseñaron cuando empecé." data-title="Consejos del profe" data-hint="Toca cada consejo">
       <div class="infos" id="tips-infos">
-        <div class="info" data-info="main" hidden><h3>Consejos del profe</h3><p>Lo que me enseñaron a mí cuando empecé. Toca cada punto alrededor de la tabla.</p></div>
+        <div class="info" data-info="main" hidden><figure class="sheet-photo"><img data-src="assets/photos/consejos.jpg" alt="Dos riders en lo alto de una montaña"><figcaption>Foto: Zach Dischner · CC BY 2.0</figcaption></figure><h3>Consejos del profe</h3><p>Lo que me enseñaron a mí cuando empecé. Toca cada punto alrededor de la tabla.</p></div>
       </div>
     </section>
 
     <!-- 11 -->
-    <section class="step" id="final" data-pos="center" data-big="Pista" data-lead="Llévatela en el móvil, también sin cobertura." data-title="¡A la pista!" data-hint="Llévatela en el móvil">
+    <section class="step" id="final" data-pos="center" data-big="Pista" data-lead="Llévatela en el móvil, también sin cobertura." data-title="¡A la pista!" data-hint="Llévatela en el móvil" data-full="final">
       <div class="dock">
         <div class="install" id="install">
           <div class="ios-only"><b>iPhone:</b> toca <span class="ico">⬆︎</span> Compartir → <b>Añadir a pantalla de inicio</b></div>
@@ -291,12 +286,21 @@
           <button class="btn primary" id="install-btn" hidden>Instalar la app</button>
         </div>
         <div class="row">
-          <a class="know solid" href="juego.html"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Jugar · La montaña</span></a>
-          <button class="know" data-goto="inicio"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Volver a empezar</span></button>
+          <button class="know solid" data-goto="inicio"><span class="know-mark"><i class="gem"></i><i class="line"></i></span><span>Volver a empezar</span></button>
         </div>
       </div>
       <div class="infos">
-        <div class="info" data-info="main" hidden><h3>¿Listo para la pista?</h3><p>Guárdala en el móvil para tenerla siempre a mano, incluso sin cobertura en la estación.</p></div>
+        <div class="info" data-info="main" hidden><h3>¿Listo para la pista?</h3><p>Guárdala en el móvil para tenerla siempre a mano, incluso sin cobertura en la estación.</p>
+          <h3 class="small">Fotos</h3>
+          <ul class="credits">
+            <li>Postura y hoja muerta: Staff Sgt. Sheila deVera (U.S. Air Force) · dominio público</li>
+            <li>Canto de puntas: Mike Lahood y Todd Belt · CC BY 3.0</li>
+            <li>Giro: Dave O · CC BY-SA 2.0</li>
+            <li>Trucos: Matt Biddulph · CC BY-SA 2.0</li>
+            <li>Consejos: Zach Dischner · CC BY 2.0</li>
+            <li>Final: Wendelin Jacober · CC0</li>
+          </ul>
+          <p class="hint">Todas de Wikimedia Commons.</p></div>
       </div>
     </section>
 

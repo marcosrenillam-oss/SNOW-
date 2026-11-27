@@ -17,7 +17,8 @@ export function initScroll() {
 
 /* ---------- Texto partido en palabras ---------- */
 export function splitInto(el, text) {
-  el.innerHTML = text.split(' ').map((w, i) => `<span class="w"><span style="--i:${i}">${w}</span></span>`).join('');
+  let k = 0;
+  el.innerHTML = text.split(' ').map((w) => `<span class="w"><span>${[...w].map((ch) => `<span class="c" style="--i:${k++}">${ch}</span>`).join('')}</span></span>`).join(' ');
 }
 
 /* ---------- Intro con contador ---------- */
